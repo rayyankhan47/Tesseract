@@ -135,7 +135,11 @@ public final class GumloopClient {
 		}
 		JsonObject planJson = extractPlanJson(body);
 		if (planJson == null) {
+			String asyncHint = detectRunMetadata(body);
 			TesseractMod.LOGGER.warn("Gumloop {} -> missing plan JSON. Body preview: {}", requestId, preview(body));
+			if (asyncHint != null) {
+				return PlanResult.error(asyncHint);
+			}
 			return PlanResult.error("Could not find build plan in Gumloop response. Body preview: " + preview(body));
 		}
 		String validationError = validatePlan(planJson, size, defaultPalette(), MAX_BLOCKS);
@@ -152,6 +156,27 @@ public final class GumloopClient {
 			plan.meta.blockCount = plan.ops.size();
 		}
 		return PlanResult.success(plan);
+	}
+
+	private static String detectRunMetadata(String body) {
+		if (body == null || body.isBlank()) {
+			return null;
+		}
+		try {
+			JsonElement root = JsonParser.parseString(body);
+			if (!root.isJsonObject()) {
+				return null;
+			}
+			JsonObject obj = root.getAsJsonObject();
+			if (obj.has("run_id") && obj.has("url") && !obj.has("meta") && !obj.has("ops")) {
+				return "Gumloop returned run metadata (run_id/url) instead of a plan. " +
+					"Use the Webhook Trigger URL and an Output node to return the plan, " +
+					"or enable synchronous webhook responses in Gumloop.";
+			}
+		} catch (JsonSyntaxException ex) {
+			return null;
+		}
+		return null;
 	}
 
 	private static BlockPos effectiveBuildSize(Selection buildSelection) {
