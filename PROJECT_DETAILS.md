@@ -49,7 +49,7 @@ Reliability > complexity. The wow factor comes from the **tight UX** and **visua
   - If we allow any redstone blocks at all, it is **decorative-only** (no promises it functions).
 - Large builds that risk lag or long generation time.
 - Perfect architectural correctness; we only need a compelling demo structure.
-- “Perfect diff editing” (like understanding architecture and doing minimal edits). MVP edits can be coarse as long as they are undoable and bounded.
+- Build modification/editing of existing structures (we will focus on **generation** + **context-aware generation**).
 
 ---
 
@@ -100,8 +100,6 @@ These constraints prevent griefing, lag spikes, and LLM “runaway plans”.
 The mod must only allow blocks from a curated list (see next section).
 
 Even if Gumloop validates, the mod must still enforce this whitelist.
-
-For “modify” mode, whitelist still applies (no surprise blocks).
 
 ### 5.4 Transaction safety (preview/undo)
 
@@ -197,12 +195,9 @@ Optional (context-aware generation):
   - `origin`: `{ "x": int, "y": int, "z": int }`
   - `size`: `{ "w": int, "h": int, "l": int }`
   - `blocks`: a bounded list of non-air blocks in the context region (relative coords), capped to a safe maximum
-
-Optional (create vs modify):
-
-- `mode`: `"create"` or `"modify"`
-- `editRules` (optional):
-  - e.g. `{ "onlyPlaceInAir": true|false }`
+  - `screenshot` (optional): an image of the player’s current view to “pad” context
+    - taken when the player has a context selection and triggers a build
+    - demo assumption: the player positions their camera so the context build is clearly visible
 
 ### 8.2 Response payload (Gumloop → Mod)
 
@@ -298,8 +293,16 @@ After a build/modify run completes:
 - Also support commands as fallback:
   - `/tesseract keep`
   - `/tesseract undo`
-- Optional timeout policy (MVP choice):
-  - default to Keep after X seconds, or default to Undo (safer) after X seconds
+
+### 12.1 No-timeout semantics (Cursor-like)
+
+- **There is no auto “Keep” or auto “Undo” timeout.** Pending changes remain in a preview state until the player explicitly acts.
+- The **build selection persists** after a run (you can keep generating/editing in the same region without re-selecting).
+- If the player starts another build/modify run while there is a pending preview:
+  - If it targets the **same build region**, Tesseract will **implicitly continue** (Cursor-like):
+    - treat the currently-previewed blocks as the new baseline
+    - start the next run and generate a new pending preview at the end
+  - If it targets a **different build region**, Tesseract should require the player to resolve the pending preview first (Keep/Undo) to avoid confusion (MVP safety).
 
 ---
 

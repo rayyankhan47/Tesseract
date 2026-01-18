@@ -46,6 +46,7 @@ Rules for using this plan:
 #### 0.2.5 Context-aware generation
 - [ ] Select a “context” region (separate wand)
 - [ ] Send context snapshot to Gumloop so the AI can imitate style
+- [ ] If context exists, attach a **screenshot** of the player’s current view (optional, best-effort)
 
 ---
 
@@ -146,10 +147,15 @@ Rules for using this plan:
 
 #### 3.1.4 Trigger build pipeline
 - [ ] Start “drafting…” message
-- [ ] Disable starting a second build concurrently (or auto-cancel previous)
+- [ ] Disable starting a second build concurrently (while an active build job is running)
+
+#### 3.1.4.1 Pending preview handling (Cursor-like)
+- [ ] If there is a pending preview and the new run targets the **same build region**, implicitly continue (treat preview as baseline) and start the new run
+- [ ] If there is a pending preview and the new run targets a **different build region**, block and ask user to `/tesseract keep` or `/tesseract undo` first
 
 #### 3.1.5 Support context-aware prompting (optional)
 - [ ] If a context selection exists, include it in the Gumloop request
+- [ ] If a context selection exists, capture/send a screenshot (best-effort; do not fail build if screenshot fails)
 
 ### 3.2 `/tesseract cancel`
 
@@ -178,6 +184,10 @@ Rules for using this plan:
 #### 3.4.3 Chat click actions
 - [ ] At the end of a run, print clickable **Keep all** / **Undo all** actions that run the commands
 
+#### 3.4.4 No-timeout policy
+- [ ] Do not auto-keep/auto-undo after time
+- [ ] Keep pending preview active until user action or implicit-continue on same region
+
 ---
 
 ## 4. Gumloop Integration (Webhook “Build Compiler”)
@@ -190,8 +200,8 @@ Rules for using this plan:
 - [ ] `size` (w,h,l)
 - [ ] `palette`
 - [ ] `maxBlocks`
-- [ ] `mode` ("create" | "modify") (optional for MVP, but planned)
 - [ ] `context` (optional): `{ origin, size, blocks[] }`
+- [ ] `context.screenshot` (optional): image bytes or base64 (depending on webhook expectations)
 
 #### 4.1.2 Define response JSON
 - [ ] `meta` (theme, blockCount, warnings)
@@ -252,8 +262,7 @@ Rules for using this plan:
 - [ ] Do not place blocks in unloaded chunks (either require loaded area or handle carefully)
 
 #### 5.2.5 Modification safety rule (MVP)
-- [ ] Default rule: `onlyPlaceInAir=true` for “create”
-- [ ] For “modify”, allow replacements but still record prior state for undo
+- [ ] Default rule: for “generation”, allow replacements inside the region but record prior state for undo/preview
 
 ---
 
@@ -303,6 +312,10 @@ Rules for using this plan:
 - [ ] Keep clears stored beforeStates
 - [ ] Undo restores beforeStates
 
+#### 6.4.4 Implicit continue behavior (Cursor-like)
+- [ ] On a new run targeting the same region: treat pending transaction as baseline and proceed
+- [ ] On a new run targeting a different region: require Keep/Undo first (MVP safety)
+
 ---
 
 ## 7. Demo Hardening (Reliability > Features)
@@ -328,10 +341,10 @@ Rules for using this plan:
 
 ## 8. Stretch Goals (Only after MVP is stable)
 
-### 8.1 Undo (soft)
+### 8.1 Timeouts for Keep/Undo (de-scoped)
 
-#### 8.1.1 Timeouts for Keep/Undo
-- [ ] If player does nothing, auto-keep or auto-undo after X seconds (pick a default)
+#### 8.1.1 Keep/Undo timeout policy
+- [ ] MVP explicitly uses a **no-timeout** policy (Cursor-like). Do not implement timeouts unless needed.
 
 ### 8.2 “Fill ops” compression
 
