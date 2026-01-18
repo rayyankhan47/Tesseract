@@ -121,12 +121,21 @@ public class TesseractMod implements ModInitializer {
 			? SelectionManager.getBuildSelection(playerId)
 			: SelectionManager.getContextSelection(playerId);
 
-		boolean isCornerA = selection.getCornerA() == null || selection.getCornerB() != null;
-		if (isCornerA) {
+		boolean isCornerA;
+		if (selection.getCornerA() == null) {
+			// First click: set Corner 1
+			isCornerA = true;
 			selection.setCornerA(pos);
 			selection.clearCornerB();
-		} else {
+		} else if (selection.getCornerB() == null) {
+			// Second click: set Corner 2
+			isCornerA = false;
 			selection.setCornerB(pos);
+		} else {
+			// Both corners set: reset and start new selection (Corner 1)
+			isCornerA = true;
+			selection.setCornerA(pos);
+			selection.clearCornerB();
 		}
 		if (!world.isClient) {
 			ServerPlayerEntity player = getServerPlayer(world, playerId);
