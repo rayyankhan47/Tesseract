@@ -171,19 +171,19 @@ Rules for using this plan:
 ### 4.2 Gumloop workflow implementation (inside Gumloop UI)
 
 #### 4.2.1 Webhook trigger node
-- [ ] Accept request payload
+- [x] Accept request payload
 
 #### 4.2.2 LLM generation node
-- [ ] Prompt includes strict JSON-only output rules + bounds + palette
+- [x] Prompt includes strict JSON-only output rules + bounds + palette
 
 #### 4.2.3 Verifier node (hard validation)
-- [ ] Reject out-of-bounds ops
-- [ ] Reject disallowed blocks
-- [ ] Reject ops length > maxBlocks
+- [x] Reject out-of-bounds ops
+- [x] Reject disallowed blocks
+- [x] Reject ops length > maxBlocks
 
 #### 4.2.4 Retry strategy
-- [ ] If invalid, feed error back and retry up to N times (e.g. 2)
-- [ ] If still invalid, return an error payload (consistent shape)
+- [x] Skip retry logic for MVP (simple success/error handling)
+- [x] Return error payload (consistent shape) on validation failure
 
 ### 4.3 Mod HTTP client + timeout behavior
 
@@ -203,21 +203,21 @@ Rules for using this plan:
 ### 5.1 JSON parsing
 
 #### 5.1.1 Add JSON library (or use built-in approach)
-- [ ] Parse response JSON into Java objects
+- [x] Parse response JSON into Java objects
 
 #### 5.1.2 Handle invalid JSON
-- [ ] Show “AI returned invalid JSON” error
+- [x] Show “AI returned invalid JSON” error
 
 ### 5.2 Validation rules (must be enforced even if Gumloop validates)
 
 #### 5.2.1 Bounds validation
-- [ ] Every op within `[0..w-1],[0..h-1],[0..l-1]`
+- [x] Every op within `[0..w-1],[0..h-1],[0..l-1]`
 
 #### 5.2.2 Whitelist validation
-- [ ] Every op block is in palette whitelist
+- [x] Every op block is in palette whitelist
 
 #### 5.2.3 Max blocks validation
-- [ ] `ops.length <= maxBlocks`
+- [x] `ops.length <= maxBlocks`
 
 #### 5.2.4 Safe execution guards
 - [ ] Do not place blocks in unloaded chunks (either require loaded area or handle carefully)

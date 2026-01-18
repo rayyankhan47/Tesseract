@@ -6,6 +6,20 @@ If anything in conversation becomes ambiguous later, **treat this file as canoni
 
 ---
 
+## ⚠️ SETUP REQUIRED: Environment Variable
+
+**BEFORE running the mod, you MUST set this environment variable:**
+
+```bash
+export GUMLOOP_WEBHOOK_URL="https://api.gumloop.com/api/v1/start_pipeline?api_key=50d96e74be0849609c62088c5102da28&user_id=TM6pLxGuKRd6jcUX2QlrXKlIx9K2&saved_item_id=1SMP5SVWn2pp7WKAekNqHH"
+```
+
+**To make it persistent**, add the above line to your `~/.zshrc` file, then run `source ~/.zshrc`.
+
+**Then run:** `./gradlew runClient`
+
+---
+
 ## 0. Elevator Pitch
 
 **Tesseract is Cursor for Minecraft**: you select a build region in-world, type what you want in chat, and an AI generates a safe, bounded build plan that the mod executes progressively so the structure “grows” in real time.

@@ -1,6 +1,12 @@
 package com.rayyan.tesseract.gumloop;
 
 import com.google.gson.Gson;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+import com.google.gson.JsonPrimitive;
+import com.google.gson.JsonSyntaxException;
 import com.rayyan.tesseract.gumloop.GumloopPayload.BlockOp;
 import com.rayyan.tesseract.gumloop.GumloopPayload.Context;
 import com.rayyan.tesseract.gumloop.GumloopPayload.Origin;
@@ -55,16 +61,191 @@ public final class GumloopClient {
 				player.getServer().execute(() -> {
 					if (error != null) {
 						player.sendMessage(Text.of("Error: Gumloop request failed: " + error.getMessage()), false);
+						com.rayyan.tesseract.jobs.BuildJobManager.finish(player.getUuid());
 						return;
 					}
 					int status = response.statusCode();
 					if (status < 200 || status >= 300) {
 						player.sendMessage(Text.of("Error: Gumloop returned status " + status), false);
+						com.rayyan.tesseract.jobs.BuildJobManager.finish(player.getUuid());
 						return;
 					}
-					player.sendMessage(Text.of("Gumloop response received (" + response.body().length() + " chars)."), false);
+					PlanResult planResult = parseAndValidatePlan(response.body(), buildSelection);
+					if (planResult.error != null) {
+						player.sendMessage(Text.of("Error: " + planResult.error), false);
+						com.rayyan.tesseract.jobs.BuildJobManager.finish(player.getUuid());
+						return;
+					}
+					GumloopPayload.Response plan = planResult.plan;
+					int count = plan.ops == null ? 0 : plan.ops.size();
+					player.sendMessage(Text.of("Plan validated: " + count + " ops."), false);
+					if (plan.meta != null && plan.meta.warnings != null && !plan.meta.warnings.isEmpty()) {
+						player.sendMessage(Text.of("Warnings: " + String.join("; ", plan.meta.warnings)), false);
+					}
+					// TODO (Step 6): enqueue plan for progressive building.
+					com.rayyan.tesseract.jobs.BuildJobManager.finish(player.getUuid());
 				});
 			});
+	}
+
+	private static PlanResult parseAndValidatePlan(String body, Selection buildSelection) {
+		if (body == null || body.isBlank()) {
+			return PlanResult.error("Gumloop returned empty response.");
+		}
+		BlockPos size = buildSelection.getSize();
+		if (size == null) {
+			return PlanResult.error("Invalid build selection size.");
+		}
+		JsonObject planJson = extractPlanJson(body);
+		if (planJson == null) {
+			return PlanResult.error("Could not find build plan in Gumloop response.");
+		}
+		String validationError = validatePlan(planJson, size, defaultPalette(), MAX_BLOCKS);
+		if (validationError != null) {
+			return PlanResult.error(validationError);
+		}
+		GumloopPayload.Response plan = GSON.fromJson(planJson, GumloopPayload.Response.class);
+		if (plan == null || plan.ops == null) {
+			return PlanResult.error("Parsed plan is missing ops.");
+		}
+		if (plan.meta == null) {
+			plan.meta = new GumloopPayload.Meta();
+			plan.meta.blockCount = plan.ops.size();
+		}
+		return PlanResult.success(plan);
+	}
+
+	private static JsonObject extractPlanJson(String body) {
+		JsonElement root;
+		try {
+			root = JsonParser.parseString(body);
+		} catch (JsonSyntaxException ex) {
+			return null;
+		}
+		return unwrapPlan(root);
+	}
+
+	private static JsonObject unwrapPlan(JsonElement element) {
+		if (element == null || element.isJsonNull()) {
+			return null;
+		}
+		if (element.isJsonObject()) {
+			JsonObject obj = element.getAsJsonObject();
+			if (obj.has("error") && !obj.get("error").isJsonNull()) {
+				return null;
+			}
+			if (obj.has("response")) {
+				return unwrapPlan(obj.get("response"));
+			}
+			if (obj.has("meta") || obj.has("ops")) {
+				return obj;
+			}
+			return null;
+		}
+		if (element.isJsonPrimitive()) {
+			JsonPrimitive primitive = element.getAsJsonPrimitive();
+			if (primitive.isString()) {
+				try {
+					return unwrapPlan(JsonParser.parseString(primitive.getAsString()));
+				} catch (JsonSyntaxException ex) {
+					return null;
+				}
+			}
+			return null;
+		}
+		return null;
+	}
+
+	private static String validatePlan(JsonObject planJson, BlockPos size, List<String> palette, int maxBlocks) {
+		if (!planJson.has("meta") || !planJson.has("ops")) {
+			return "Plan missing required fields (meta, ops).";
+		}
+		if (!planJson.get("meta").isJsonObject()) {
+			return "Plan meta must be an object.";
+		}
+		if (!planJson.get("ops").isJsonArray()) {
+			return "Plan ops must be an array.";
+		}
+		JsonObject meta = planJson.getAsJsonObject("meta");
+		JsonArray ops = planJson.getAsJsonArray("ops");
+		Integer blockCount = getInt(meta.get("blockCount"));
+		if (blockCount == null) {
+			return "Plan meta.blockCount must be an integer.";
+		}
+		if (ops.size() > maxBlocks) {
+			return "Plan has too many ops (" + ops.size() + " > " + maxBlocks + ").";
+		}
+		int width = size.getX();
+		int height = size.getY();
+		int length = size.getZ();
+		for (int i = 0; i < ops.size(); i++) {
+			JsonElement rawOp = ops.get(i);
+			if (!rawOp.isJsonObject()) {
+				return "Op " + i + " is not an object.";
+			}
+			JsonObject op = rawOp.getAsJsonObject();
+			Integer x = getInt(op.get("x"));
+			Integer y = getInt(op.get("y"));
+			Integer z = getInt(op.get("z"));
+			String block = getString(op.get("block"));
+			if (x == null || y == null || z == null || block == null) {
+				return "Op " + i + " missing x/y/z/block.";
+			}
+			if (x < 0 || x >= width || y < 0 || y >= height || z < 0 || z >= length) {
+				return "Op " + i + " out of bounds (" + x + "," + y + "," + z + ").";
+			}
+			if (!palette.contains(block)) {
+				return "Op " + i + " uses disallowed block: " + block;
+			}
+		}
+		if (blockCount != ops.size()) {
+			return "meta.blockCount does not match ops length.";
+		}
+		return null;
+	}
+
+	private static Integer getInt(JsonElement element) {
+		if (element == null || !element.isJsonPrimitive()) {
+			return null;
+		}
+		JsonPrimitive primitive = element.getAsJsonPrimitive();
+		if (!primitive.isNumber()) {
+			return null;
+		}
+		try {
+			return primitive.getAsInt();
+		} catch (NumberFormatException ex) {
+			return null;
+		}
+	}
+
+	private static String getString(JsonElement element) {
+		if (element == null || !element.isJsonPrimitive()) {
+			return null;
+		}
+		JsonPrimitive primitive = element.getAsJsonPrimitive();
+		if (!primitive.isString()) {
+			return null;
+		}
+		return primitive.getAsString();
+	}
+
+	private static final class PlanResult {
+		private final GumloopPayload.Response plan;
+		private final String error;
+
+		private PlanResult(GumloopPayload.Response plan, String error) {
+			this.plan = plan;
+			this.error = error;
+		}
+
+		private static PlanResult success(GumloopPayload.Response plan) {
+			return new PlanResult(plan, null);
+		}
+
+		private static PlanResult error(String error) {
+			return new PlanResult(null, error);
+		}
 	}
 
 	private static Request buildRequest(ServerPlayerEntity player, Selection buildSelection, Selection contextSelection, String prompt) {
