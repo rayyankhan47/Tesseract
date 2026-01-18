@@ -550,6 +550,7 @@ public final class GumloopClient {
 		context.size = toSize(contextSelection.getSize());
 		context.blocks = captureBlocks(world, contextSelection, defaultPalette());
 		if (context.blocks.isEmpty()) {
+			TesseractMod.LOGGER.warn("Context selection had no palette blocks; ignoring context.");
 			return null;
 		}
 		context.screenshot = null;
