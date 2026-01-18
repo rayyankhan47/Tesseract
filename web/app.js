@@ -82,10 +82,15 @@ async function readFilesAsDataUrls(files) {
 }
 
 let statusTimers = [];
+let statusRevealTimer;
 
 function clearStatusTimers() {
   statusTimers.forEach((timer) => clearTimeout(timer));
   statusTimers = [];
+  if (statusRevealTimer) {
+    clearTimeout(statusRevealTimer);
+    statusRevealTimer = null;
+  }
 }
 
 function resetStatus() {
@@ -139,6 +144,7 @@ function showResult({ url, size, error }) {
     resultError.classList.remove("hidden");
     resultLink.textContent = "";
     resultMeta.textContent = "";
+    statusDone?.classList.remove("hidden");
     return;
   }
   resultLink.textContent = url;
@@ -162,7 +168,11 @@ async function handleGenerate() {
   generateButton.disabled = true;
   generateButton.textContent = "Generating...";
   bodyEl.classList.add("is-generating");
+  bodyEl.classList.remove("show-status");
   statusPanel?.classList.remove("hidden");
+  statusRevealTimer = setTimeout(() => {
+    bodyEl.classList.add("show-status");
+  }, 500);
   startStatusSequence();
 
   try {
@@ -178,8 +188,10 @@ async function handleGenerate() {
     }
     statusItems.forEach((item) => item.classList.add("done"));
     statusItems.forEach((item) => item.classList.remove("active"));
+    bodyEl.classList.add("show-status");
     showResult(payload);
   } catch (error) {
+    bodyEl.classList.add("show-status");
     showResult({ error: error.message || "Generate failed." });
     clearStatusTimers();
   } finally {

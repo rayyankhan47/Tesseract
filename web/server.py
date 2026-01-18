@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import json
 import os
+import ssl
 import time
 import urllib.parse
 import urllib.request
@@ -14,6 +15,7 @@ PORT = int(os.environ.get("WEB_SERVER_PORT", "5173"))
 
 GUMLOOP_WEBHOOK_URL = os.environ.get("GUMLOOP_WEBHOOK_URL")
 PLAN_SERVER_URL = os.environ.get("PLAN_SERVER_URL", "http://localhost:4890/plans")
+SKIP_SSL_VERIFY = os.environ.get("GUMLOOP_SKIP_SSL_VERIFY") == "1"
 
 DEFAULT_SIZE = {"w": 16, "h": 12, "l": 16}
 DEFAULT_MAX_BLOCKS = 600
@@ -81,9 +83,20 @@ def http_json(url, payload=None, method="GET", headers=None, timeout=20):
     req.add_header("Content-Type", "application/json")
     for key, value in (headers or {}).items():
         req.add_header(key, value)
-    with urllib.request.urlopen(req, timeout=timeout) as response:
+    context = None
+    if SKIP_SSL_VERIFY:
+        context = ssl._create_unverified_context()
+    with urllib.request.urlopen(req, timeout=timeout, context=context) as response:
         body = response.read().decode("utf-8")
         return response.status, body
+
+
+def preview(text, limit=220):
+    if text is None:
+        return ""
+    if len(text) <= limit:
+        return text
+    return text[:limit] + "..."
 
 
 def poll_gumloop_for_plan(run_id, webhook_url, max_attempts=120, interval=1.0):
@@ -200,12 +213,12 @@ class WebHandler(BaseHTTPRequestHandler):
             self._send_json(502, {"error": f"Gumloop request failed: {exc}"})
             return
         if status < 200 or status >= 300:
-            self._send_json(502, {"error": f"Gumloop returned status {status}."})
+            self._send_json(502, {"error": f"Gumloop returned status {status}: {preview(body)}"})
             return
         try:
             gumloop_response = json.loads(body)
         except json.JSONDecodeError:
-            self._send_json(502, {"error": "Gumloop returned invalid JSON."})
+            self._send_json(502, {"error": f"Gumloop returned invalid JSON: {preview(body)}"})
             return
         plan = find_plan(gumloop_response)
         if not plan and gumloop_response.get("run_id"):
@@ -215,7 +228,7 @@ class WebHandler(BaseHTTPRequestHandler):
                 self._send_json(502, {"error": str(exc)})
                 return
         if not plan:
-            self._send_json(502, {"error": "Could not find a build plan in Gumloop output."})
+            self._send_json(502, {"error": f"Could not find a build plan in Gumloop output: {preview(body)}"})
             return
         if "meta" not in plan or "ops" not in plan:
             self._send_json(502, {"error": "Plan missing meta or ops."})
@@ -226,7 +239,7 @@ class WebHandler(BaseHTTPRequestHandler):
             self._send_json(502, {"error": f"Plan server error: {exc}"})
             return
         if plan_status < 200 or plan_status >= 300:
-            self._send_json(502, {"error": "Plan server rejected the plan."})
+            self._send_json(502, {"error": f"Plan server rejected the plan: {preview(plan_body)}"})
             return
         try:
             plan_response = json.loads(plan_body)

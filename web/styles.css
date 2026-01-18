@@ -162,7 +162,7 @@ body::before {
 .hero-content {
   width: min(900px, 92vw);
   text-align: center;
-  transition: opacity 0.6s ease, transform 0.6s ease;
+  transition: opacity 1s ease, transform 1s ease;
 }
 
 .logo {
@@ -199,14 +199,14 @@ h1 {
 
 .status-panel {
   width: min(680px, 90vw);
-  background: rgba(255, 255, 255, 0.92);
-  border: 1px solid rgba(11, 11, 15, 0.12);
-  border-radius: 24px;
-  padding: 28px;
-  box-shadow: 0 28px 60px rgba(0, 0, 0, 0.12);
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  box-shadow: none;
   text-align: left;
   opacity: 0;
-  transform: translateY(16px);
+  transform: translateY(10px);
   transition: opacity 0.6s ease, transform 0.6s ease;
 }
 
@@ -268,11 +268,11 @@ h1 {
 
 .is-generating .hero-content {
   opacity: 0;
-  transform: translateY(-20px);
+  transform: translateY(-32px);
   pointer-events: none;
 }
 
-.is-generating .status-panel {
+.show-status .status-panel {
   opacity: 1;
   transform: translateY(0);
 }
