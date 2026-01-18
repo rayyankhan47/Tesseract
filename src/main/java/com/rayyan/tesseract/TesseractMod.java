@@ -4,7 +4,10 @@ import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.command.v1.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.event.player.AttackBlockCallback;
 import net.fabricmc.fabric.api.event.player.UseBlockCallback;
+import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
+import net.minecraft.network.PacketByteBuf;
 import net.minecraft.server.command.ServerCommandSource;
+import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.text.Text;
 import net.minecraft.util.ActionResult;
 import net.minecraft.util.Hand;
@@ -13,8 +16,10 @@ import net.minecraft.world.World;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.rayyan.tesseract.network.SelectionNetworking;
 import com.rayyan.tesseract.selection.Selection;
 import com.rayyan.tesseract.selection.SelectionManager;
+import io.netty.buffer.Unpooled;
 import net.minecraft.item.Item;
 import net.minecraft.item.Items;
 
@@ -52,7 +57,9 @@ public class TesseractMod implements ModInitializer {
 				)
 				.then(literal("clear")
 					.executes(context -> {
-						SelectionManager.clearBuildSelection(context.getSource().getPlayer().getUuid());
+						ServerPlayerEntity player = context.getSource().getPlayer();
+						SelectionManager.clearBuildSelection(player.getUuid());
+						sendSelectionToClient(player, true);
 						sendMessage(context.getSource(), "Build selection cleared.");
 						return 1;
 					})
@@ -60,7 +67,9 @@ public class TesseractMod implements ModInitializer {
 				.then(literal("context")
 					.then(literal("clear")
 						.executes(context -> {
-							SelectionManager.clearContextSelection(context.getSource().getPlayer().getUuid());
+							ServerPlayerEntity player = context.getSource().getPlayer();
+							SelectionManager.clearContextSelection(player.getUuid());
+							sendSelectionToClient(player, false);
 							sendMessage(context.getSource(), "Context selection cleared.");
 							return 1;
 						})
@@ -118,7 +127,11 @@ public class TesseractMod implements ModInitializer {
 			selection.setCornerB(pos);
 		}
 		if (!world.isClient) {
-			sendMessageToPlayer(world, playerId, formatCornerMessage(isBuild, isCornerA, pos));
+			ServerPlayerEntity player = getServerPlayer(world, playerId);
+			if (player != null) {
+				sendMessage(player.getCommandSource(), formatCornerMessage(isBuild, isCornerA, pos));
+				sendSelectionToClient(player, isBuild);
+			}
 		}
 	}
 
@@ -128,14 +141,20 @@ public class TesseractMod implements ModInitializer {
 		return type + " " + which + " set: " + pos.getX() + " " + pos.getY() + " " + pos.getZ();
 	}
 
-	private static void sendMessageToPlayer(World world, UUID playerId, String message) {
+	private static ServerPlayerEntity getServerPlayer(World world, UUID playerId) {
 		if (world.getServer() == null) {
-			return;
+			return null;
 		}
-		if (world.getServer().getPlayerManager().getPlayer(playerId) == null) {
-			return;
-		}
-		ServerCommandSource source = world.getServer().getPlayerManager().getPlayer(playerId).getCommandSource();
-		source.sendFeedback(Text.of(message), false);
+		return world.getServer().getPlayerManager().getPlayer(playerId);
+	}
+
+	private static void sendSelectionToClient(ServerPlayerEntity player, boolean isBuild) {
+		Selection selection = isBuild
+			? SelectionManager.getBuildSelection(player.getUuid())
+			: SelectionManager.getContextSelection(player.getUuid());
+
+		PacketByteBuf buf = new PacketByteBuf(Unpooled.buffer());
+		SelectionNetworking.writeSelection(buf, isBuild, selection);
+		ServerPlayNetworking.send(player, SelectionNetworking.SELECTION_UPDATE, buf);
 	}
 }

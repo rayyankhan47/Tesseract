@@ -1,9 +1,11 @@
 package com.rayyan.tesseract;
 
 import com.mojang.blaze3d.systems.RenderSystem;
+import com.rayyan.tesseract.network.SelectionNetworking;
 import com.rayyan.tesseract.selection.Selection;
 import com.rayyan.tesseract.selection.SelectionManager;
 import net.fabricmc.api.ClientModInitializer;
+import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.fabricmc.fabric.api.client.rendering.v1.WorldRenderEvents;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.render.BufferBuilder;
@@ -26,6 +28,22 @@ public class TesseractClient implements ClientModInitializer {
 
 	@Override
 	public void onInitializeClient() {
+		ClientPlayNetworking.registerGlobalReceiver(SelectionNetworking.SELECTION_UPDATE, (client, handler, buf, responseSender) -> {
+			boolean isBuild = buf.readBoolean();
+			Selection selection = SelectionNetworking.readSelection(buf);
+			client.execute(() -> {
+				if (client.player == null) {
+					return;
+				}
+				if (isBuild) {
+					SelectionManager.getBuildSelection(client.player.getUuid()).setCornerA(selection.getCornerA());
+					SelectionManager.getBuildSelection(client.player.getUuid()).setCornerB(selection.getCornerB());
+				} else {
+					SelectionManager.getContextSelection(client.player.getUuid()).setCornerA(selection.getCornerA());
+					SelectionManager.getContextSelection(client.player.getUuid()).setCornerB(selection.getCornerB());
+				}
+			});
+		});
 		WorldRenderEvents.LAST.register(context -> renderSelectionOverlay(context.matrixStack(), context.camera().getPos()));
 	}
 
