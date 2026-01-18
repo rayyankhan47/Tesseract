@@ -136,7 +136,7 @@ public final class GumloopClient {
 		JsonObject planJson = extractPlanJson(body);
 		if (planJson == null) {
 			TesseractMod.LOGGER.warn("Gumloop {} -> missing plan JSON. Body preview: {}", requestId, preview(body));
-			return PlanResult.error("Could not find build plan in Gumloop response.");
+			return PlanResult.error("Could not find build plan in Gumloop response. Body preview: " + preview(body));
 		}
 		String validationError = validatePlan(planJson, size, defaultPalette(), MAX_BLOCKS);
 		if (validationError != null) {
