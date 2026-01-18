@@ -34,10 +34,6 @@ The MVP is successful if it reliably demos this loop **2–3 times in a row**:
 4. Mod sends `{prompt, region, whitelist, maxBlocks}` to Gumloop.
 5. Gumloop returns a **validated JSON** build plan.
 6. Mod re-validates and **progressively places blocks** to visualize the build “growing”.
-7. When the build finishes, Tesseract enters a **preview/confirmation state**:
-   - show a highlight overlay over blocks that were placed/changed
-   - present chat actions: **Keep all** or **Undo all** (Cursor-like)
-8. Player can cancel mid-build: `/tesseract cancel`.
 
 Reliability > complexity. The wow factor comes from the **tight UX** and **visual execution**.
 
@@ -70,10 +66,6 @@ After both corners are set (and before building starts):
 - Show a **filled translucent ground tint** over the selected ground area.
 - Also optionally show an outline of the cuboid (nice-to-have), but the ground tint is the MVP requirement.
 
-After a build/modify run completes (preview state):
-
-- Highlight the **changed blocks** (placed or replaced) so the player can visually inspect the “diff”.
-
 ### 4.3 Edge cases
 
 - If the player has not selected both corners, running `/tesseract build ...` must return:
@@ -100,12 +92,6 @@ These constraints prevent griefing, lag spikes, and LLM “runaway plans”.
 The mod must only allow blocks from a curated list (see next section).
 
 Even if Gumloop validates, the mod must still enforce this whitelist.
-
-### 5.4 Transaction safety (preview/undo)
-
-- Every build/modify run is executed as an **undoable transaction**:
-  - record each changed position and its previous block state
-  - after completion, require **Keep** or **Undo** (or choose a default + timeout)
 
 ---
 
@@ -277,36 +263,11 @@ We’ll also maintain 1–2 pre-tested prompts for reliability, e.g.:
   - “Building… 35% (2800/8000)”
 
 ### 11.2 Cancellation
-
-- `/tesseract cancel` stops the queue immediately.
-- Note: MVP includes undo via the transaction system (see Keep/Undo).
+De-scoped for MVP.
 
 ---
 
-## 12. Keep / Undo (Cursor-like Confirmation)
-
-After a build/modify run completes:
-
-- Show clickable chat actions:
-  - **Keep all**: finalizes the transaction (no further action required)
-  - **Undo all**: reverts all changed blocks to their previous states
-- Also support commands as fallback:
-  - `/tesseract keep`
-  - `/tesseract undo`
-
-### 12.1 No-timeout semantics (Cursor-like)
-
-- **There is no auto “Keep” or auto “Undo” timeout.** Pending changes remain in a preview state until the player explicitly acts.
-- The **build selection persists** after a run (you can keep generating/editing in the same region without re-selecting).
-- If the player starts another build/modify run while there is a pending preview:
-  - If it targets the **same build region**, Tesseract will **implicitly continue** (Cursor-like):
-    - treat the currently-previewed blocks as the new baseline
-    - start the next run and generate a new pending preview at the end
-  - If it targets a **different build region**, Tesseract should require the player to resolve the pending preview first (Keep/Undo) to avoid confusion (MVP safety).
-
----
-
-## 13. Error Handling (Required Messages)
+## 12. Error Handling (Required Messages)
 
 Examples of user-facing errors:
 
@@ -318,12 +279,10 @@ Examples of user-facing errors:
   - `Error: failed to contact Gumloop. Try again.`
 - Invalid JSON / validation failure:
   - `Error: AI returned an invalid plan (out of bounds / disallowed blocks / too many blocks).`
-- No preview to keep/undo:
-  - `Error: no pending changes to keep/undo.`
 
 ---
 
-## 14. Demo Script (Recommended)
+## 13. Demo Script (Recommended)
 
 1. Fly to a flat area.
 2. Select region corners; let judges see overlay.
@@ -331,17 +290,15 @@ Examples of user-facing errors:
 4. Run `/tesseract build <tested prompt>` or “build in the same style as the context”.
 5. Pause and narrate: “Gumloop compiles a safe build plan.”
 6. Watch progressive build.
-7. Show “diff” highlight + **Keep/Undo** chat actions.
-8. Optionally show `/tesseract undo` to prove safety, then re-run.
+7. Optionally rerun with another prompt or context to show a second flow.
 
 ---
 
-## 15. What We’ll Keep Updating During the Hackathon
+## 14. What We’ll Keep Updating During the Hackathon
 
 - Block whitelist (if we find a block is essential or problematic)
 - MaxBlocks and build rate (to avoid lag)
 - Gumloop prompt and validator rules (to reduce retries)
 - Visual overlay polish (tint/alpha/color)
-- Transaction UX (Keep/Undo messaging, timeout default)
 - Context serialization strategy (how much context to send vs summarize)
 

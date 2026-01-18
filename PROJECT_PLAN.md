@@ -35,14 +35,6 @@ Rules for using this plan:
 - [ ] Place blocks in batches over time (configurable rate)
 - [ ] Show progress feedback in chat
 
-#### 0.2.3 Cancellation
-- [ ] `/tesseract cancel` stops the build queue immediately
-
-#### 0.2.4 Cursor-like confirmation (Keep/Undo)
-- [ ] After generation/modification completes, highlight changed blocks
-- [ ] Provide chat actions: **Keep all** / **Undo all**
-- [ ] Provide command fallbacks: `/tesseract keep`, `/tesseract undo`
-
 #### 0.2.5 Context-aware generation
 - [ ] Select a “context” region (separate wand)
 - [ ] Send context snapshot to Gumloop so the AI can imitate style
@@ -119,20 +111,12 @@ Rules for using this plan:
 - [ ] If selected area too large, render simplified overlay or refuse selection
 
 ### 2.4 “Diff highlight” overlay (after build finishes)
-
-#### 2.4.1 Track changed blocks in the last transaction
-- [ ] Maintain a per-player list/set of changed block positions (and prior states)
-
-#### 2.4.2 Render highlight overlay on changed blocks
-- [ ] After job completes, render translucent highlight for changed positions until Keep/Undo
-
-#### 2.4.3 Clear highlight on finalize
-- [ ] Keep: clear highlight + discard stored prior states
-- [ ] Undo: revert blocks + clear highlight
+#### 2.4.1 (De-scoped)
+- [ ] Keep/Undo + diff highlight are out of scope for MVP.
 
 ---
 
-## 3. Commands UX (Build, Cancel, Clear)
+## 3. Commands UX (Build, Clear)
 
 ### 3.1 `/tesseract build <prompt...>`
 
@@ -149,23 +133,11 @@ Rules for using this plan:
 - [ ] Start “drafting…” message
 - [ ] Disable starting a second build concurrently (while an active build job is running)
 
-#### 3.1.4.1 Pending preview handling (Cursor-like)
-- [ ] If there is a pending preview and the new run targets the **same build region**, implicitly continue (treat preview as baseline) and start the new run
-- [ ] If there is a pending preview and the new run targets a **different build region**, block and ask user to `/tesseract keep` or `/tesseract undo` first
-
 #### 3.1.5 Support context-aware prompting (optional)
 - [ ] If a context selection exists, include it in the Gumloop request
 - [ ] If a context selection exists, capture/send a screenshot (best-effort; do not fail build if screenshot fails)
 
-### 3.2 `/tesseract cancel`
-
-#### 3.2.1 Stop active queue
-- [ ] Cancel immediately
-
-#### 3.2.2 User feedback
-- [ ] “Build cancelled.”
-
-### 3.3 `/tesseract clear`
+### 3.2 `/tesseract clear`
 
 #### 3.3.1 Clear selection
 - [ ] Remove stored corners
@@ -173,20 +145,9 @@ Rules for using this plan:
 #### 3.3.2 Clear overlay state
 - [ ] Overlay disappears immediately
 
-### 3.4 Keep/Undo commands
-
-#### 3.4.1 `/tesseract keep`
-- [ ] Finalize the last completed transaction (if pending)
-
-#### 3.4.2 `/tesseract undo`
-- [ ] Revert the last completed transaction (if pending)
-
-#### 3.4.3 Chat click actions
-- [ ] At the end of a run, print clickable **Keep all** / **Undo all** actions that run the commands
-
-#### 3.4.4 No-timeout policy
-- [ ] Do not auto-keep/auto-undo after time
-- [ ] Keep pending preview active until user action or implicit-continue on same region
+### 3.3 Keep/Undo commands
+#### 3.4.1 (De-scoped)
+- [ ] Keep/Undo is out of scope for MVP.
 
 ---
 
@@ -263,6 +224,7 @@ Rules for using this plan:
 
 #### 5.2.5 Modification safety rule (MVP)
 - [ ] Default rule: for “generation”, allow replacements inside the region but record prior state for undo/preview
+  - Note: “record prior state for undo/preview” is de-scoped if we drop Keep/Undo; we may still record minimal state for potential cancel-safety, but no user-facing undo.
 
 ---
 
@@ -275,8 +237,6 @@ Rules for using this plan:
 - [ ] Origin, size
 - [ ] Ops list
 - [ ] Current index/progress
-- [ ] Mode: create/modify
-- [ ] Transaction: list of `{pos, beforeState, afterState}` for undo/preview
 
 #### 6.1.2 Prevent concurrent build conflicts
 - [ ] One active build per player (MVP)
@@ -292,29 +252,10 @@ Rules for using this plan:
 #### 6.2.3 Progress messages
 - [ ] Update every N blocks or every second
 
-### 6.3 Cancellation
+### 6.3 End-of-job behavior
 
-#### 6.3.1 Cancel mid-build
-- [ ] Stops future placements immediately
-
-#### 6.3.2 Post-cancel cleanup
-- [ ] Clear job state so a new build can start
-
-### 6.4 End-of-job confirmation
-
-#### 6.4.1 Enter “pending confirmation” state
-- [ ] After job finishes, mark transaction as pending
-
-#### 6.4.2 Display Keep/Undo UI
-- [ ] Chat click actions + fallback commands
-
-#### 6.4.3 Finalize or revert
-- [ ] Keep clears stored beforeStates
-- [ ] Undo restores beforeStates
-
-#### 6.4.4 Implicit continue behavior (Cursor-like)
-- [ ] On a new run targeting the same region: treat pending transaction as baseline and proceed
-- [ ] On a new run targeting a different region: require Keep/Undo first (MVP safety)
+#### 6.3.1 Completion message
+- [ ] After job finishes, announce completion and basic stats (blocks placed, duration)
 
 ---
 
@@ -341,10 +282,10 @@ Rules for using this plan:
 
 ## 8. Stretch Goals (Only after MVP is stable)
 
-### 8.1 Timeouts for Keep/Undo (de-scoped)
+### 8.1 Undo / diff preview (future)
 
-#### 8.1.1 Keep/Undo timeout policy
-- [ ] MVP explicitly uses a **no-timeout** policy (Cursor-like). Do not implement timeouts unless needed.
+#### 8.1.1 Transactional Keep/Undo
+- [ ] Add Keep/Undo and diff highlighting after MVP is stable.
 
 ### 8.2 “Fill ops” compression
 
