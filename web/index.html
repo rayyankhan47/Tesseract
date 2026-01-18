@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Tesseract Build Compiler</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <header class="top-bar">
+      <div class="brand">Tesseract</div>
+      <button class="ghost-button" type="button">Local Demo</button>
+    </header>
+
+    <main class="hero">
+      <div class="hero-content">
+        <img class="logo" src="../tesseractlogo.jpg" alt="Tesseract logo" />
+        <h1>Minecraft's 4th Dimension: Agentic Automation.</h1>
+        <p class="subtitle">What are we building today?</p>
+
+        <div class="prompt-card">
+          <label class="prompt-label" for="promptInput">Prompt</label>
+          <textarea
+            id="promptInput"
+            class="prompt-input"
+            rows="2"
+            placeholder="I want to build"
+          ></textarea>
+          <div class="prompt-actions">
+            <label class="attach-button" for="imageInput">Attach image</label>
+            <input id="imageInput" type="file" accept="image/*" multiple />
+            <button class="primary-button" type="button">Generate build</button>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <script src="./app.js"></script>
+  </body>
+</html>

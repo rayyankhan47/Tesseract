@@ -1,0 +1,150 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: "Montserrat", system-ui, -apple-system, sans-serif;
+  background: radial-gradient(circle at top, #232443, #0c0c13 65%);
+  color: #f5f6ff;
+}
+
+.top-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24px 48px;
+}
+
+.brand {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+}
+
+.ghost-button {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #f5f6ff;
+  border-radius: 999px;
+  padding: 10px 18px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.hero {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 64px 24px 96px;
+}
+
+.hero-content {
+  width: min(900px, 92vw);
+  text-align: center;
+}
+
+.logo {
+  width: 120px;
+  height: 120px;
+  object-fit: contain;
+  margin-bottom: 16px;
+  border-radius: 24px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
+}
+
+h1 {
+  font-size: clamp(32px, 4vw, 56px);
+  font-weight: 800;
+  margin: 0 0 12px;
+  line-height: 1.1;
+}
+
+.subtitle {
+  font-size: clamp(18px, 2.2vw, 24px);
+  color: rgba(245, 246, 255, 0.75);
+  margin: 0 0 40px;
+  font-weight: 500;
+}
+
+.prompt-card {
+  background: rgba(18, 18, 30, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 28px;
+  border-radius: 24px;
+  text-align: left;
+  box-shadow: 0 28px 60px rgba(0, 0, 0, 0.45);
+}
+
+.prompt-label {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 12px;
+  color: rgba(245, 246, 255, 0.9);
+}
+
+.prompt-input {
+  width: 100%;
+  min-height: 90px;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(8, 8, 16, 0.8);
+  padding: 18px 20px;
+  color: #f5f6ff;
+  font-size: 20px;
+  font-weight: 600;
+  resize: none;
+  outline: none;
+}
+
+.prompt-input::placeholder {
+  color: rgba(245, 246, 255, 0.45);
+  font-weight: 500;
+}
+
+.prompt-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-top: 20px;
+}
+
+.attach-button {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px dashed rgba(255, 255, 255, 0.3);
+  color: rgba(245, 246, 255, 0.75);
+  padding: 10px 16px;
+  border-radius: 999px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+#imageInput {
+  display: none;
+}
+
+.primary-button {
+  background: linear-gradient(135deg, #6f4cff, #d04bff);
+  color: #fff;
+  border: none;
+  padding: 12px 22px;
+  border-radius: 999px;
+  font-weight: 700;
+  cursor: pointer;
+  font-size: 15px;
+  box-shadow: 0 16px 32px rgba(111, 76, 255, 0.35);
+}
+
+@media (max-width: 640px) {
+  .top-bar {
+    padding: 20px 24px;
+  }
+
+  .prompt-card {
+    padding: 22px;
+  }
+}
