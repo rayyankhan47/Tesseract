@@ -131,6 +131,7 @@ Rules for using this plan:
 
 #### 3.1.4 Trigger build pipeline
 - [x] Start “drafting…” message
+- [x] Show an indeterminate “drafting…” progress bar while waiting for Gumloop
 - [x] Disable starting a second build concurrently (while an active build job is running)
 
 #### 3.1.5 Support context-aware prompting (optional)

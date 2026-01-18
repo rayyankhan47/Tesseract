@@ -39,7 +39,8 @@ public final class BuildQueueManager {
 			player.sendMessage(Text.of("Error: invalid build origin."), false);
 			return false;
 		}
-		BuildJob job = new BuildJob(playerId, player.getServerWorld(), origin, plan.ops);
+		// 1.18.2: ServerPlayerEntity#getWorld() returns a ServerWorld on the server.
+		BuildJob job = new BuildJob(playerId, (ServerWorld) player.getWorld(), origin, plan.ops);
 		ACTIVE_JOBS.put(playerId, job);
 		player.sendMessage(Text.of("Build started (" + plan.ops.size() + " ops)."), false);
 		return true;

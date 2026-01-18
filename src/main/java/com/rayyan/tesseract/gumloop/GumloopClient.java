@@ -51,6 +51,7 @@ public final class GumloopClient {
 		long startNanos = System.nanoTime();
 		Request request = buildRequest(player, buildSelection, contextSelection, prompt);
 		String json = GSON.toJson(request);
+		GumloopProgressManager.startDrafting(player, requestId);
 		TesseractMod.LOGGER.info("Gumloop {} -> sending request (size={}, contextBlocks={}, hasScreenshot={})",
 			requestId,
 			request.size == null ? "unknown" : request.size.w + "x" + request.size.h + "x" + request.size.l,
@@ -74,12 +75,14 @@ public final class GumloopClient {
 					if (error != null) {
 						TesseractMod.LOGGER.error("Gumloop {} -> request failed after {}ms: {}", requestId, elapsedMs, error.toString());
 						player.sendMessage(Text.of("Error: Gumloop request failed (request " + requestId + ")."), false);
+						GumloopProgressManager.stopDrafting(player.getUuid());
 						com.rayyan.tesseract.jobs.BuildJobManager.finish(player.getUuid());
 						return;
 					}
 					if (response == null) {
 						TesseractMod.LOGGER.error("Gumloop {} -> null response after {}ms.", requestId, elapsedMs);
 						player.sendMessage(Text.of("Error: Gumloop response was empty (request " + requestId + ")."), false);
+						GumloopProgressManager.stopDrafting(player.getUuid());
 						com.rayyan.tesseract.jobs.BuildJobManager.finish(player.getUuid());
 						return;
 					}
@@ -93,12 +96,14 @@ public final class GumloopClient {
 					if (status < 200 || status >= 300) {
 						TesseractMod.LOGGER.warn("Gumloop {} -> non-2xx response: {}", requestId, preview(body));
 						player.sendMessage(Text.of("Error: Gumloop returned status " + status + " (request " + requestId + ")."), false);
+						GumloopProgressManager.stopDrafting(player.getUuid());
 						com.rayyan.tesseract.jobs.BuildJobManager.finish(player.getUuid());
 						return;
 					}
 					PlanResult planResult = parseAndValidatePlan(body, buildSelection, requestId);
 					if (planResult.error != null) {
 						player.sendMessage(Text.of("Error: " + planResult.error + " (request " + requestId + ")."), false);
+						GumloopProgressManager.stopDrafting(player.getUuid());
 						com.rayyan.tesseract.jobs.BuildJobManager.finish(player.getUuid());
 						return;
 					}
@@ -108,6 +113,7 @@ public final class GumloopClient {
 					if (plan.meta != null && plan.meta.warnings != null && !plan.meta.warnings.isEmpty()) {
 						player.sendMessage(Text.of("Warnings: " + String.join("; ", plan.meta.warnings)), false);
 					}
+					GumloopProgressManager.stopDrafting(player.getUuid());
 					boolean queued = BuildQueueManager.startBuild(player, buildSelection, plan);
 					if (!queued) {
 						player.sendMessage(Text.of("Error: failed to start build (request " + requestId + ")."), false);
@@ -311,7 +317,8 @@ public final class GumloopClient {
 		request.size = toSize(effectiveBuildSize(buildSelection));
 		request.palette = defaultPalette();
 		request.maxBlocks = MAX_BLOCKS;
-		request.context = buildContext(player.getServerWorld(), contextSelection);
+		// 1.18.2: ServerPlayerEntity#getWorld() returns a ServerWorld on the server.
+		request.context = buildContext((ServerWorld) player.getWorld(), contextSelection);
 		return request;
 	}
 
