@@ -174,23 +174,38 @@ public final class GumloopClient {
 		} catch (JsonSyntaxException ex) {
 			return null;
 		}
-		return unwrapPlan(root);
+		return findPlan(root, 0);
 	}
 
-	private static JsonObject unwrapPlan(JsonElement element) {
-		if (element == null || element.isJsonNull()) {
+	private static JsonObject findPlan(JsonElement element, int depth) {
+		if (element == null || element.isJsonNull() || depth > 6) {
 			return null;
 		}
 		if (element.isJsonObject()) {
 			JsonObject obj = element.getAsJsonObject();
-			if (obj.has("error") && !obj.get("error").isJsonNull()) {
-				return null;
-			}
-			if (obj.has("response")) {
-				return unwrapPlan(obj.get("response"));
-			}
 			if (obj.has("meta") || obj.has("ops")) {
 				return obj;
+			}
+			if (obj.has("response")) {
+				JsonObject found = findPlan(obj.get("response"), depth + 1);
+				if (found != null) {
+					return found;
+				}
+			}
+			for (String key : obj.keySet()) {
+				JsonObject found = findPlan(obj.get(key), depth + 1);
+				if (found != null) {
+					return found;
+				}
+			}
+			return null;
+		}
+		if (element.isJsonArray()) {
+			for (JsonElement child : element.getAsJsonArray()) {
+				JsonObject found = findPlan(child, depth + 1);
+				if (found != null) {
+					return found;
+				}
 			}
 			return null;
 		}
@@ -198,12 +213,11 @@ public final class GumloopClient {
 			JsonPrimitive primitive = element.getAsJsonPrimitive();
 			if (primitive.isString()) {
 				try {
-					return unwrapPlan(JsonParser.parseString(primitive.getAsString()));
+					return findPlan(JsonParser.parseString(primitive.getAsString()), depth + 1);
 				} catch (JsonSyntaxException ex) {
 					return null;
 				}
 			}
-			return null;
 		}
 		return null;
 	}
