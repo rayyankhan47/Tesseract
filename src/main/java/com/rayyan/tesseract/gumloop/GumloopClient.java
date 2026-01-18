@@ -23,18 +23,25 @@ import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.registry.Registry;
 
 import java.net.URI;
+import java.net.URLDecoder;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 
 public final class GumloopClient {
 	private static final int MAX_CONTEXT_BLOCKS = 500;
 	private static final int MAX_BLOCKS = 600;
 	private static final int DEFAULT_BUILD_HEIGHT = 12;
 	private static final int LOG_BODY_PREVIEW = 240;
+	private static final int POLL_INTERVAL_MS = 1000;
+	private static final int MAX_POLL_ATTEMPTS = 70;
 	private static final Gson GSON = new Gson();
 	private static final HttpClient CLIENT = HttpClient.newHttpClient();
 
@@ -100,6 +107,12 @@ public final class GumloopClient {
 						com.rayyan.tesseract.jobs.BuildJobManager.finish(player.getUuid());
 						return;
 					}
+					String runId = extractRunId(body);
+					if (runId != null) {
+						TesseractMod.LOGGER.info("Gumloop {} -> received run_id {}, polling for outputs.", requestId, runId);
+						pollRunForPlan(player, buildSelection, requestId, runId, webhook, 0);
+						return;
+					}
 					PlanResult planResult = parseAndValidatePlan(body, buildSelection, requestId);
 					if (planResult.error != null) {
 						player.sendMessage(Text.of("Error: " + planResult.error + " (request " + requestId + ")."), false);
@@ -142,6 +155,10 @@ public final class GumloopClient {
 			}
 			return PlanResult.error("Could not find build plan in Gumloop response. Body preview: " + preview(body));
 		}
+		return parseAndValidatePlanJson(planJson, size, requestId);
+	}
+
+	private static PlanResult parseAndValidatePlanJson(JsonObject planJson, BlockPos size, String requestId) {
 		String validationError = validatePlan(planJson, size, defaultPalette(), MAX_BLOCKS);
 		if (validationError != null) {
 			TesseractMod.LOGGER.warn("Gumloop {} -> validation failed: {}", requestId, validationError);
@@ -156,6 +173,166 @@ public final class GumloopClient {
 			plan.meta.blockCount = plan.ops.size();
 		}
 		return PlanResult.success(plan);
+	}
+
+	private static void pollRunForPlan(ServerPlayerEntity player, Selection buildSelection, String requestId, String runId, String webhook, int attempt) {
+		if (player == null || player.getServer() == null) {
+			return;
+		}
+		if (attempt >= MAX_POLL_ATTEMPTS) {
+			player.getServer().execute(() -> {
+				player.sendMessage(Text.of("Error: Gumloop run timed out waiting for outputs (request " + requestId + ")."), false);
+				GumloopProgressManager.stopDrafting(player.getUuid());
+				com.rayyan.tesseract.jobs.BuildJobManager.finish(player.getUuid());
+			});
+			return;
+		}
+
+		PollConfig config = parseWebhookConfig(webhook);
+		URI pollUri = buildPollUri(runId, config);
+		HttpRequest.Builder builder = HttpRequest.newBuilder()
+			.uri(pollUri)
+			.timeout(Duration.ofSeconds(15))
+			.header("Content-Type", "application/json")
+			.GET();
+		if (config.apiKey != null && !config.apiKey.isBlank()) {
+			builder.header("Authorization", "Bearer " + config.apiKey);
+		}
+		HttpRequest pollRequest = builder.build();
+
+		CLIENT.sendAsync(pollRequest, HttpResponse.BodyHandlers.ofString())
+			.whenComplete((response, error) -> {
+				if (player.getServer() == null) {
+					return;
+				}
+				player.getServer().execute(() -> {
+					if (error != null || response == null) {
+						TesseractMod.LOGGER.warn("Gumloop {} -> poll attempt {} failed: {}", requestId, attempt, error);
+						scheduleNextPoll(player, buildSelection, requestId, runId, webhook, attempt + 1);
+						return;
+					}
+					String body = response.body();
+					JsonElement root;
+					try {
+						root = JsonParser.parseString(body);
+					} catch (JsonSyntaxException ex) {
+						scheduleNextPoll(player, buildSelection, requestId, runId, webhook, attempt + 1);
+						return;
+					}
+					if (!root.isJsonObject()) {
+						scheduleNextPoll(player, buildSelection, requestId, runId, webhook, attempt + 1);
+						return;
+					}
+					JsonObject obj = root.getAsJsonObject();
+					String state = getString(obj.get("state"));
+					if (state != null && state.equalsIgnoreCase("FAILED")) {
+						player.sendMessage(Text.of("Error: Gumloop run failed (request " + requestId + ")."), false);
+						GumloopProgressManager.stopDrafting(player.getUuid());
+						com.rayyan.tesseract.jobs.BuildJobManager.finish(player.getUuid());
+						return;
+					}
+					JsonElement outputs = obj.get("outputs");
+					if (outputs != null && !outputs.isJsonNull()) {
+						JsonObject planJson = findPlan(outputs, 0);
+						if (planJson != null) {
+							PlanResult planResult = parseAndValidatePlanJson(planJson, effectiveBuildSize(buildSelection), requestId);
+							if (planResult.error != null) {
+								player.sendMessage(Text.of("Error: " + planResult.error + " (request " + requestId + ")."), false);
+								GumloopProgressManager.stopDrafting(player.getUuid());
+								com.rayyan.tesseract.jobs.BuildJobManager.finish(player.getUuid());
+								return;
+							}
+							GumloopPayload.Response plan = planResult.plan;
+							int count = plan.ops == null ? 0 : plan.ops.size();
+							player.sendMessage(Text.of("Plan validated: " + count + " ops."), false);
+							if (plan.meta != null && plan.meta.warnings != null && !plan.meta.warnings.isEmpty()) {
+								player.sendMessage(Text.of("Warnings: " + String.join("; ", plan.meta.warnings)), false);
+							}
+							GumloopProgressManager.stopDrafting(player.getUuid());
+							boolean queued = BuildQueueManager.startBuild(player, buildSelection, plan);
+							if (!queued) {
+								player.sendMessage(Text.of("Error: failed to start build (request " + requestId + ")."), false);
+								com.rayyan.tesseract.jobs.BuildJobManager.finish(player.getUuid());
+							}
+							return;
+						}
+					}
+					scheduleNextPoll(player, buildSelection, requestId, runId, webhook, attempt + 1);
+				});
+			});
+	}
+
+	private static void scheduleNextPoll(ServerPlayerEntity player, Selection buildSelection, String requestId, String runId, String webhook, int nextAttempt) {
+		CompletableFuture.delayedExecutor(POLL_INTERVAL_MS, java.util.concurrent.TimeUnit.MILLISECONDS)
+			.execute(() -> pollRunForPlan(player, buildSelection, requestId, runId, webhook, nextAttempt));
+	}
+
+	private static PollConfig parseWebhookConfig(String webhook) {
+		PollConfig config = new PollConfig();
+		try {
+			URI uri = URI.create(webhook);
+			Map<String, String> params = parseQueryParams(uri.getRawQuery());
+			config.apiKey = params.get("api_key");
+			config.userId = params.get("user_id");
+		} catch (IllegalArgumentException ex) {
+			// ignore and use defaults
+		}
+		return config;
+	}
+
+	private static URI buildPollUri(String runId, PollConfig config) {
+		StringBuilder sb = new StringBuilder("https://api.gumloop.com/api/v1/get_pl_run?run_id=");
+		sb.append(runId);
+		if (config.userId != null && !config.userId.isBlank()) {
+			sb.append("&user_id=").append(urlEncode(config.userId));
+		}
+		if (config.apiKey != null && !config.apiKey.isBlank()) {
+			sb.append("&api_key=").append(urlEncode(config.apiKey));
+		}
+		return URI.create(sb.toString());
+	}
+
+	private static String extractRunId(String body) {
+		if (body == null || body.isBlank()) {
+			return null;
+		}
+		try {
+			JsonElement root = JsonParser.parseString(body);
+			if (!root.isJsonObject()) {
+				return null;
+			}
+			JsonObject obj = root.getAsJsonObject();
+			return getString(obj.get("run_id"));
+		} catch (JsonSyntaxException ex) {
+			return null;
+		}
+	}
+
+	private static Map<String, String> parseQueryParams(String query) {
+		Map<String, String> params = new HashMap<>();
+		if (query == null || query.isBlank()) {
+			return params;
+		}
+		String[] pairs = query.split("&");
+		for (String pair : pairs) {
+			int idx = pair.indexOf('=');
+			if (idx <= 0) {
+				continue;
+			}
+			String key = URLDecoder.decode(pair.substring(0, idx), StandardCharsets.UTF_8);
+			String value = URLDecoder.decode(pair.substring(idx + 1), StandardCharsets.UTF_8);
+			params.put(key, value);
+		}
+		return params;
+	}
+
+	private static String urlEncode(String value) {
+		return java.net.URLEncoder.encode(value, StandardCharsets.UTF_8);
+	}
+
+	private static final class PollConfig {
+		private String apiKey;
+		private String userId;
 	}
 
 	private static String detectRunMetadata(String body) {
