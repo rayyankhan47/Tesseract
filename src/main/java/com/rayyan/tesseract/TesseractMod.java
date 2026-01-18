@@ -22,9 +22,11 @@ import com.rayyan.tesseract.selection.SelectionManager;
 import io.netty.buffer.Unpooled;
 import net.minecraft.item.Item;
 import net.minecraft.item.Items;
+import com.mojang.brigadier.arguments.StringArgumentType;
 
 import java.util.UUID;
 
+import static net.minecraft.server.command.CommandManager.argument;
 import static net.minecraft.server.command.CommandManager.literal;
 
 public class TesseractMod implements ModInitializer {
@@ -34,6 +36,7 @@ public class TesseractMod implements ModInitializer {
 	public static final Logger LOGGER = LoggerFactory.getLogger("tesseract");
 	private static final Item BUILD_WAND = Items.WOODEN_AXE;
 	private static final Item CONTEXT_WAND = Items.GOLDEN_AXE;
+	private static final int MAX_REGION_SIZE = 32;
 
 	@Override
 	public void onInitialize() {
@@ -71,6 +74,38 @@ public class TesseractMod implements ModInitializer {
 							SelectionManager.clearContextSelection(player.getUuid());
 							sendSelectionToClient(player, false);
 							sendMessage(context.getSource(), "Context selection cleared.");
+							return 1;
+						})
+					)
+				)
+				.then(literal("build")
+					.then(argument("prompt", StringArgumentType.greedyString())
+						.executes(context -> {
+							ServerPlayerEntity player = context.getSource().getPlayer();
+							Selection selection = SelectionManager.getBuildSelection(player.getUuid());
+							if (selection == null || !selection.isComplete()) {
+								sendMessage(context.getSource(), "Error: you haven't selected a region yet. Select two corners first.");
+								return 0;
+							}
+							BlockPos size = selection.getSize();
+							if (size == null) {
+								sendMessage(context.getSource(), "Error: invalid selection.");
+								return 0;
+							}
+							if (size.getX() > MAX_REGION_SIZE || size.getY() > MAX_REGION_SIZE || size.getZ() > MAX_REGION_SIZE) {
+								sendMessage(context.getSource(), "Error: selected region is too large (max 32x32x32).");
+								return 0;
+							}
+
+							String prompt = StringArgumentType.getString(context, "prompt");
+							sendMessage(context.getSource(), "Tesseract drafting: \"" + prompt + "\"");
+							sendMessage(context.getSource(), "Selection size: " + size.getX() + "x" + size.getY() + "x" + size.getZ());
+
+							Selection contextSelection = SelectionManager.getContextSelection(player.getUuid());
+							if (contextSelection != null && contextSelection.isComplete()) {
+								sendMessage(context.getSource(), "Context attached (cyan selection).");
+							}
+
 							return 1;
 						})
 					)
