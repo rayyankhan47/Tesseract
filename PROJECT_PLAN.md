@@ -156,17 +156,17 @@ Rules for using this plan:
 ### 4.1 Workflow contract design
 
 #### 4.1.1 Define request JSON
-- [ ] `prompt`
-- [ ] `origin` (world coords)
-- [ ] `size` (w,h,l)
-- [ ] `palette`
-- [ ] `maxBlocks`
-- [ ] `context` (optional): `{ origin, size, blocks[] }`
-- [ ] `context.screenshot` (optional): image bytes or base64 (depending on webhook expectations)
+- [x] `prompt`
+- [x] `origin` (world coords)
+- [x] `size` (w,h,l)
+- [x] `palette`
+- [x] `maxBlocks`
+- [x] `context` (optional): `{ origin, size, blocks[] }`
+- [x] `context.screenshot` (optional): image bytes or base64 (depending on webhook expectations)
 
 #### 4.1.2 Define response JSON
-- [ ] `meta` (theme, blockCount, warnings)
-- [ ] `ops` list `{x,y,z,block}`
+- [x] `meta` (theme, blockCount, warnings)
+- [x] `ops` list `{x,y,z,block}`
 
 ### 4.2 Gumloop workflow implementation (inside Gumloop UI)
 
@@ -188,13 +188,13 @@ Rules for using this plan:
 ### 4.3 Mod HTTP client + timeout behavior
 
 #### 4.3.1 Add configurable Gumloop endpoint
-- [ ] Store webhook URL in config/env
+- [x] Store webhook URL in config/env
 
 #### 4.3.2 Perform request asynchronously
-- [ ] Do not freeze server thread
+- [x] Do not freeze server thread
 
 #### 4.3.3 Timeouts and error messages
-- [ ] On timeout/failure: message to player + do not start build
+- [x] On timeout/failure: message to player + do not start build
 
 ---
 

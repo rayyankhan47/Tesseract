@@ -17,6 +17,7 @@ import net.minecraft.world.World;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.rayyan.tesseract.gumloop.GumloopClient;
 import com.rayyan.tesseract.jobs.BuildJobManager;
 import com.rayyan.tesseract.network.SelectionNetworking;
 import com.rayyan.tesseract.selection.Selection;
@@ -112,6 +113,7 @@ public class TesseractMod implements ModInitializer {
 							if (contextSelection != null && contextSelection.isComplete()) {
 								sendMessage(context.getSource(), "Context attached (cyan selection).");
 							}
+							GumloopClient.sendBuildRequest(player, selection, contextSelection, prompt);
 
 							return 1;
 						})
