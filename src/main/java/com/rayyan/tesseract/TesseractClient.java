@@ -20,9 +20,12 @@ import net.minecraft.util.math.Vec3d;
 import net.minecraft.util.math.Matrix3f;
 
 public class TesseractClient implements ClientModInitializer {
-	private static final float OUTLINE_R = 1.0f;
-	private static final float OUTLINE_G = 0.1f;
-	private static final float OUTLINE_B = 0.1f;
+	private static final float BUILD_R = 1.0f;
+	private static final float BUILD_G = 0.1f;
+	private static final float BUILD_B = 0.1f;
+	private static final float CONTEXT_R = 0.2f;
+	private static final float CONTEXT_G = 1.0f;
+	private static final float CONTEXT_B = 1.0f;
 	private static final float OUTLINE_A = 1.0f;
 	private static final float OUTLINE_Y_OFFSET = 0.01f;
 
@@ -53,7 +56,15 @@ public class TesseractClient implements ClientModInitializer {
 		if (client.player == null || client.world == null) {
 			return;
 		}
-		Selection selection = SelectionManager.getBuildSelection(client.player.getUuid());
+		Selection buildSelection = SelectionManager.getBuildSelection(client.player.getUuid());
+		Selection contextSelection = SelectionManager.getContextSelection(client.player.getUuid());
+
+		renderSelectionOutlineFor(matrices, consumers, cameraPos, tickDelta, buildSelection, BUILD_R, BUILD_G, BUILD_B);
+		renderSelectionOutlineFor(matrices, consumers, cameraPos, tickDelta, contextSelection, CONTEXT_R, CONTEXT_G, CONTEXT_B);
+	}
+
+	private void renderSelectionOutlineFor(MatrixStack matrices, VertexConsumerProvider consumers, Vec3d cameraPos,
+		float tickDelta, Selection selection, float colorR, float colorG, float colorB) {
 		if (selection == null || selection.getCornerA() == null) {
 			return;
 		}
@@ -63,7 +74,7 @@ public class TesseractClient implements ClientModInitializer {
 		BlockPos targetPos = null;
 
 		if (cornerB == null) {
-			targetPos = getTargetBlockPos(client, tickDelta);
+			targetPos = getTargetBlockPos(MinecraftClient.getInstance(), tickDelta);
 			if (targetPos == null) {
 				return;
 			}
@@ -74,7 +85,7 @@ public class TesseractClient implements ClientModInitializer {
 		if (cornerB != null) {
 			min = selection.getMin();
 			max = selection.getMax();
-		} else if (targetPos != null) {
+		} else {
 			min = new BlockPos(
 				Math.min(cornerA.getX(), targetPos.getX()),
 				Math.min(cornerA.getY(), targetPos.getY()),
@@ -85,8 +96,6 @@ public class TesseractClient implements ClientModInitializer {
 				Math.max(cornerA.getY(), targetPos.getY()),
 				Math.max(cornerA.getZ(), targetPos.getZ())
 			);
-		} else {
-			return;
 		}
 
 		BlockPos size = new BlockPos(
@@ -111,19 +120,19 @@ public class TesseractClient implements ClientModInitializer {
 		Matrix3f normalMatrix = matrices.peek().getNormalMatrix();
 
 		VertexConsumer buffer = consumers.getBuffer(RenderLayer.getLines());
-		drawLine(buffer, matrix, normalMatrix, minX, maxY, minZ, maxX, maxY, minZ);
-		drawLine(buffer, matrix, normalMatrix, maxX, maxY, minZ, maxX, maxY, maxZ);
-		drawLine(buffer, matrix, normalMatrix, maxX, maxY, maxZ, minX, maxY, maxZ);
-		drawLine(buffer, matrix, normalMatrix, minX, maxY, maxZ, minX, maxY, minZ);
+		drawLine(buffer, matrix, normalMatrix, colorR, colorG, colorB, minX, maxY, minZ, maxX, maxY, minZ);
+		drawLine(buffer, matrix, normalMatrix, colorR, colorG, colorB, maxX, maxY, minZ, maxX, maxY, maxZ);
+		drawLine(buffer, matrix, normalMatrix, colorR, colorG, colorB, maxX, maxY, maxZ, minX, maxY, maxZ);
+		drawLine(buffer, matrix, normalMatrix, colorR, colorG, colorB, minX, maxY, maxZ, minX, maxY, minZ);
 
 		matrices.pop();
 	}
 
 	private void drawLine(VertexConsumer buffer, Matrix4f matrix, Matrix3f normalMatrix,
-		float x1, float y1, float z1, float x2, float y2, float z2) {
-		buffer.vertex(matrix, x1, y1, z1).color(OUTLINE_R, OUTLINE_G, OUTLINE_B, OUTLINE_A)
+		float colorR, float colorG, float colorB, float x1, float y1, float z1, float x2, float y2, float z2) {
+		buffer.vertex(matrix, x1, y1, z1).color(colorR, colorG, colorB, OUTLINE_A)
 			.normal(normalMatrix, 0.0f, 1.0f, 0.0f).next();
-		buffer.vertex(matrix, x2, y2, z2).color(OUTLINE_R, OUTLINE_G, OUTLINE_B, OUTLINE_A)
+		buffer.vertex(matrix, x2, y2, z2).color(colorR, colorG, colorB, OUTLINE_A)
 			.normal(normalMatrix, 0.0f, 1.0f, 0.0f).next();
 	}
 
