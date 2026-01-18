@@ -41,7 +41,7 @@ public final class GumloopClient {
 	private static final int DEFAULT_BUILD_HEIGHT = 12;
 	private static final int LOG_BODY_PREVIEW = 240;
 	private static final int POLL_INTERVAL_MS = 1000;
-	private static final int MAX_POLL_ATTEMPTS = 70;
+	private static final int MAX_POLL_ATTEMPTS = 120;
 	private static final Gson GSON = new Gson();
 	private static final HttpClient CLIENT = HttpClient.newHttpClient();
 
