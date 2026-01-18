@@ -1,12 +1,14 @@
 const promptInput = document.getElementById("promptInput");
 const imageInput = document.getElementById("imageInput");
 const generateButton = document.getElementById("generateButton");
-const result = document.getElementById("result");
 const resultLink = document.getElementById("resultLink");
-const resultStatus = document.getElementById("resultStatus");
 const resultMeta = document.getElementById("resultMeta");
 const resultError = document.getElementById("resultError");
 const copyButton = document.getElementById("copyButton");
+const statusPanel = document.getElementById("statusPanel");
+const statusDone = document.getElementById("statusDone");
+const statusItems = Array.from(document.querySelectorAll(".status-item"));
+const bodyEl = document.body;
 
 const baseText = "I want to build";
 const phrases = [
@@ -79,29 +81,73 @@ async function readFilesAsDataUrls(files) {
   return Promise.all(readers);
 }
 
-function showResult({ url, size, error, status }) {
-  if (!result || !resultLink || !resultMeta || !resultError || !resultStatus) {
+let statusTimers = [];
+
+function clearStatusTimers() {
+  statusTimers.forEach((timer) => clearTimeout(timer));
+  statusTimers = [];
+}
+
+function resetStatus() {
+  clearStatusTimers();
+  statusItems.forEach((item, index) => {
+    item.classList.remove("done", "active");
+    if (index === 0) {
+      item.classList.add("active");
+    }
+  });
+  statusDone?.classList.add("hidden");
+  resultError?.classList.add("hidden");
+  if (resultError) {
+    resultError.textContent = "";
+  }
+  if (resultLink) {
+    resultLink.textContent = "";
+  }
+  if (resultMeta) {
+    resultMeta.textContent = "";
+  }
+  if (copyButton) {
+    copyButton.textContent = "Copy";
+  }
+}
+
+function startStatusSequence() {
+  resetStatus();
+  const stepDelay = 15000;
+  const advance = (fromIndex, toIndex) => {
+    if (!statusItems[fromIndex] || !statusItems[toIndex]) {
+      return;
+    }
+    statusItems[fromIndex].classList.remove("active");
+    statusItems[fromIndex].classList.add("done");
+    statusItems[toIndex].classList.add("active");
+  };
+  statusTimers.push(setTimeout(() => advance(0, 1), stepDelay));
+  statusTimers.push(setTimeout(() => advance(1, 2), stepDelay * 2));
+  statusTimers.push(setTimeout(() => advance(2, 3), stepDelay * 3));
+}
+
+function showResult({ url, size, error }) {
+  if (!resultLink || !resultMeta || !resultError) {
     return;
   }
-  result.classList.remove("hidden");
   resultError.classList.add("hidden");
   resultError.textContent = "";
-  resultStatus.textContent = status || "";
   if (error) {
     resultError.textContent = error;
     resultError.classList.remove("hidden");
     resultLink.textContent = "";
-    resultLink.href = "#";
     resultMeta.textContent = "";
     return;
   }
   resultLink.textContent = url;
-  resultLink.href = url;
   if (size && size.w && size.h && size.l) {
-    resultMeta.textContent = `Select a ${size.w}x${size.h}x${size.l} region, then /tesseract paste ${url}`;
+    resultMeta.textContent = `Done! Load up the Tesseract mod, select a ${size.w}x${size.h}x${size.l} area, and use /tesseract paste ${url} to see your build appear before your eyes.`;
   } else {
-    resultMeta.textContent = `Use /tesseract paste ${url}`;
+    resultMeta.textContent = `Done! Load up the Tesseract mod, select an area, and use /tesseract paste ${url} to see your build appear before your eyes.`;
   }
+  statusDone?.classList.remove("hidden");
 }
 
 async function handleGenerate() {
@@ -115,7 +161,9 @@ async function handleGenerate() {
   }
   generateButton.disabled = true;
   generateButton.textContent = "Generating...";
-  showResult({ status: "Generating build plan..." });
+  bodyEl.classList.add("is-generating");
+  statusPanel?.classList.remove("hidden");
+  startStatusSequence();
 
   try {
     const images = await readFilesAsDataUrls(imageInput?.files || []);
@@ -128,9 +176,12 @@ async function handleGenerate() {
     if (!response.ok || payload.error) {
       throw new Error(payload.error || "Generate failed.");
     }
+    statusItems.forEach((item) => item.classList.add("done"));
+    statusItems.forEach((item) => item.classList.remove("active"));
     showResult(payload);
   } catch (error) {
     showResult({ error: error.message || "Generate failed." });
+    clearStatusTimers();
   } finally {
     generateButton.disabled = false;
     generateButton.textContent = "Generate build";
@@ -143,7 +194,7 @@ async function handleCopy() {
   }
   try {
     await navigator.clipboard.writeText(resultLink.textContent);
-    copyButton.textContent = "Copied";
+    copyButton.textContent = "Copied to Clipboard!";
     setTimeout(() => {
       copyButton.textContent = "Copy";
     }, 1500);

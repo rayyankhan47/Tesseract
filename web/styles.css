@@ -162,6 +162,7 @@ body::before {
 .hero-content {
   width: min(900px, 92vw);
   text-align: center;
+  transition: opacity 0.6s ease, transform 0.6s ease;
 }
 
 .logo {
@@ -194,6 +195,86 @@ h1 {
   border-radius: 24px;
   text-align: left;
   box-shadow: 0 28px 60px rgba(0, 0, 0, 0.12);
+}
+
+.status-panel {
+  width: min(680px, 90vw);
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(11, 11, 15, 0.12);
+  border-radius: 24px;
+  padding: 28px;
+  box-shadow: 0 28px 60px rgba(0, 0, 0, 0.12);
+  text-align: left;
+  opacity: 0;
+  transform: translateY(16px);
+  transition: opacity 0.6s ease, transform 0.6s ease;
+}
+
+.status-list {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.status-item {
+  font-size: 18px;
+  font-weight: 600;
+  color: rgba(11, 11, 15, 0.35);
+  transition: color 0.3s ease;
+}
+
+.status-item.active {
+  color: rgba(11, 11, 15, 0.85);
+}
+
+.status-item.done {
+  color: rgba(11, 11, 15, 0.45);
+}
+
+.status-done {
+  border-top: 1px solid rgba(11, 11, 15, 0.1);
+  padding-top: 18px;
+}
+
+.done-title {
+  margin: 0 0 12px;
+  font-weight: 700;
+  color: rgba(11, 11, 15, 0.85);
+}
+
+.done-url-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.done-url {
+  font-family: "SF Mono", "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 14px;
+  color: #0b0b0f;
+  background: rgba(11, 11, 15, 0.04);
+  padding: 8px 12px;
+  border-radius: 12px;
+  word-break: break-all;
+}
+
+.done-subtitle {
+  margin: 12px 0 0;
+  color: rgba(11, 11, 15, 0.6);
+  font-size: 14px;
+}
+
+.is-generating .hero-content {
+  opacity: 0;
+  transform: translateY(-20px);
+  pointer-events: none;
+}
+
+.is-generating .status-panel {
+  opacity: 1;
+  transform: translateY(0);
 }
 
 .prompt-label {

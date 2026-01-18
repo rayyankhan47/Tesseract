@@ -23,7 +23,7 @@
     </header>
 
     <main class="hero">
-      <div class="hero-content">
+      <div class="hero-content" id="heroContent">
         <img class="logo" src="./redstoneblock.png" alt="Redstone Block" />
         <h1>Agentic Automation for Minecraft.</h1>
         <p class="subtitle">What are we building today?</p>
@@ -41,16 +41,23 @@
             <input id="imageInput" type="file" accept="image/*" multiple />
             <button class="primary-button" type="button" id="generateButton">Generate build</button>
           </div>
-          <div class="result hidden" id="result">
-            <div class="result-row">
-              <span class="result-label">Paste URL</span>
-              <button class="ghost-button" type="button" id="copyButton">Copy</button>
-            </div>
-            <a class="result-link" id="resultLink" href="#" target="_blank" rel="noreferrer"></a>
-            <p class="result-status" id="resultStatus"></p>
-            <p class="result-meta" id="resultMeta"></p>
-            <p class="result-error hidden" id="resultError"></p>
+        </div>
+      </div>
+      <div class="status-panel hidden" id="statusPanel">
+        <div class="status-list">
+          <div class="status-item active" data-step="1">1. Initializing...</div>
+          <div class="status-item" data-step="2">2. Building...</div>
+          <div class="status-item" data-step="3">3. Validating...</div>
+          <div class="status-item" data-step="4">4. Almost done...</div>
+        </div>
+        <div class="status-done hidden" id="statusDone">
+          <p class="done-title">Done! Load up the Tesseract mod, select an area, and use:</p>
+          <div class="done-url-row">
+            <code class="done-url" id="resultLink"></code>
+            <button class="ghost-button" type="button" id="copyButton">Copy</button>
           </div>
+          <p class="done-subtitle" id="resultMeta"></p>
+          <p class="result-error hidden" id="resultError"></p>
         </div>
       </div>
     </main>
