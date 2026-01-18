@@ -79,6 +79,9 @@ public class TesseractMod implements ModInitializer {
 		});
 
 		AttackBlockCallback.EVENT.register((player, world, hand, pos, direction) -> {
+			if (world.isClient) {
+				return ActionResult.PASS;
+			}
 			if (hand != Hand.MAIN_HAND) {
 				return ActionResult.PASS;
 			}
@@ -95,6 +98,9 @@ public class TesseractMod implements ModInitializer {
 		});
 
 		UseBlockCallback.EVENT.register((player, world, hand, hitResult) -> {
+			if (world.isClient) {
+				return ActionResult.PASS;
+			}
 			if (hand != Hand.MAIN_HAND) {
 				return ActionResult.PASS;
 			}
