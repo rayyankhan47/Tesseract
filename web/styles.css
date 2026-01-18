@@ -231,6 +231,63 @@ h1 {
   margin-top: 20px;
 }
 
+.result {
+  margin-top: 22px;
+  padding: 16px 18px;
+  border-radius: 18px;
+  border: 1px solid rgba(11, 11, 15, 0.12);
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.result-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.result-label {
+  font-weight: 600;
+  color: rgba(11, 11, 15, 0.7);
+}
+
+.result-link {
+  display: block;
+  color: #0b0b0f;
+  font-weight: 600;
+  word-break: break-all;
+  text-decoration: none;
+  margin-bottom: 6px;
+}
+
+.result-link:hover {
+  text-decoration: underline;
+}
+
+.result-meta {
+  margin: 0;
+  color: rgba(11, 11, 15, 0.6);
+  font-size: 14px;
+}
+
+.result-status {
+  margin: 0 0 6px;
+  color: rgba(11, 11, 15, 0.6);
+  font-size: 14px;
+}
+
+.result-error {
+  margin: 10px 0 0;
+  color: #c0392b;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.hidden {
+  display: none;
+}
+
 .attach-button {
   background: #ffffff;
   border: 1px dashed rgba(11, 11, 15, 0.4);

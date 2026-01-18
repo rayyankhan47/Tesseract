@@ -32,6 +32,18 @@ It exposes:
 - `POST http://localhost:4890/plans` → returns `{ "id": "ABC123", "url": "http://localhost:4890/plans/ABC123" }`
 - `GET  http://localhost:4890/plans/<id>` → returns the plan JSON `{ meta, ops }`
 
+### Local web UI (Gumloop → plan URL)
+
+Run the web UI server (serves the UI and proxies to Gumloop):
+
+```bash
+python3 web/server.py
+```
+
+Then open `http://localhost:5173`.
+When you click Generate, the server calls Gumloop and stores the plan in the local plan server,
+returning a paste URL you can use with `/tesseract paste <url>`.
+
 ---
 
 ## 0. Elevator Pitch

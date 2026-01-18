@@ -39,7 +39,17 @@
           <div class="prompt-actions">
             <label class="attach-button" for="imageInput">Attach image</label>
             <input id="imageInput" type="file" accept="image/*" multiple />
-            <button class="primary-button" type="button">Generate build</button>
+            <button class="primary-button" type="button" id="generateButton">Generate build</button>
+          </div>
+          <div class="result hidden" id="result">
+            <div class="result-row">
+              <span class="result-label">Paste URL</span>
+              <button class="ghost-button" type="button" id="copyButton">Copy</button>
+            </div>
+            <a class="result-link" id="resultLink" href="#" target="_blank" rel="noreferrer"></a>
+            <p class="result-status" id="resultStatus"></p>
+            <p class="result-meta" id="resultMeta"></p>
+            <p class="result-error hidden" id="resultError"></p>
           </div>
         </div>
       </div>
