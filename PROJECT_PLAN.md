@@ -131,7 +131,7 @@ Rules for using this plan:
 
 #### 3.1.4 Trigger build pipeline
 - [x] Start “drafting…” message
-- [ ] Disable starting a second build concurrently (while an active build job is running)
+- [x] Disable starting a second build concurrently (while an active build job is running)
 
 #### 3.1.5 Support context-aware prompting (optional)
 - [x] If a context selection exists, include it in the Gumloop request

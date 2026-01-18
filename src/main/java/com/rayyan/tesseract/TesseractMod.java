@@ -4,6 +4,7 @@ import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.command.v1.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.event.player.AttackBlockCallback;
 import net.fabricmc.fabric.api.event.player.UseBlockCallback;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.network.PacketByteBuf;
 import net.minecraft.server.command.ServerCommandSource;
@@ -16,6 +17,7 @@ import net.minecraft.world.World;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.rayyan.tesseract.jobs.BuildJobManager;
 import com.rayyan.tesseract.network.SelectionNetworking;
 import com.rayyan.tesseract.selection.Selection;
 import com.rayyan.tesseract.selection.SelectionManager;
@@ -82,6 +84,10 @@ public class TesseractMod implements ModInitializer {
 					.then(argument("prompt", StringArgumentType.greedyString())
 						.executes(context -> {
 							ServerPlayerEntity player = context.getSource().getPlayer();
+							if (BuildJobManager.isInProgress(player.getUuid())) {
+								sendMessage(context.getSource(), "Build already in progress. Please wait.");
+								return 0;
+							}
 							Selection selection = SelectionManager.getBuildSelection(player.getUuid());
 							if (selection == null || !selection.isComplete()) {
 								sendMessage(context.getSource(), "Error: you haven't selected a region yet. Select two corners first.");
@@ -98,6 +104,7 @@ public class TesseractMod implements ModInitializer {
 							}
 
 							String prompt = StringArgumentType.getString(context, "prompt");
+							BuildJobManager.start(player.getUuid());
 							sendMessage(context.getSource(), "Tesseract drafting: \"" + prompt + "\"");
 							sendMessage(context.getSource(), "Selection size: " + size.getX() + "x" + size.getY() + "x" + size.getZ());
 
@@ -112,6 +119,8 @@ public class TesseractMod implements ModInitializer {
 				)
 			);
 		});
+
+		ServerTickEvents.END_SERVER_TICK.register(server -> BuildJobManager.tick());
 
 		AttackBlockCallback.EVENT.register((player, world, hand, pos, direction) -> {
 			if (world.isClient) {
