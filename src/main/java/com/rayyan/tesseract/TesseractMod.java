@@ -23,7 +23,7 @@ public class TesseractMod implements ModInitializer {
 
 		LOGGER.info("Tesseract initialized.");
 
-		CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) -> {
+		CommandRegistrationCallback.EVENT.register((dispatcher, dedicated) -> {
 			dispatcher.register(literal("tesseract")
 				.executes(context -> {
 					sendMessage(context.getSource(), "Tesseract loaded. Use /tesseract help.");
@@ -40,6 +40,6 @@ public class TesseractMod implements ModInitializer {
 	}
 
 	private static void sendMessage(ServerCommandSource source, String message) {
-		source.sendFeedback(Text.literal(message), false);
+		source.sendFeedback(Text.of(message), false);
 	}
 }

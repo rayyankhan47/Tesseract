@@ -56,7 +56,7 @@ Rules for using this plan:
 - [x] Display name
 
 #### 1.1.3 Confirm Gradle wrapper works
-- [ ] `./gradlew build` succeeds locally
+- [x] `./gradlew build` succeeds locally
 
 ### 1.2 Mod entrypoints and baseline command
 
