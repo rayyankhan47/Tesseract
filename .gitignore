@@ -1,6 +1,7 @@
 # gradle
 
 .gradle/
+.gradle-jdk*/
 build/
 out/
 classes/
@@ -31,3 +32,16 @@ bin/
 # fabric
 
 run/
+*.log
+*.jar
+!gradle/wrapper/gradle-wrapper.jar
+
+# Minecraft/Gradle generated files
+.gradle/
+.gradle-*/
+.minecraft/
+libraries/
+versions/
+natives/
+logs/
+crash-reports/

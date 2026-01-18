@@ -31,7 +31,8 @@ import java.util.List;
 
 public final class GumloopClient {
 	private static final int MAX_CONTEXT_BLOCKS = 500;
-	private static final int MAX_BLOCKS = 8000;
+	private static final int MAX_BLOCKS = 600;
+	private static final int DEFAULT_BUILD_HEIGHT = 12;
 	private static final Gson GSON = new Gson();
 	private static final HttpClient CLIENT = HttpClient.newHttpClient();
 
@@ -96,7 +97,7 @@ public final class GumloopClient {
 		if (body == null || body.isBlank()) {
 			return PlanResult.error("Gumloop returned empty response.");
 		}
-		BlockPos size = buildSelection.getSize();
+		BlockPos size = effectiveBuildSize(buildSelection);
 		if (size == null) {
 			return PlanResult.error("Invalid build selection size.");
 		}
@@ -117,6 +118,19 @@ public final class GumloopClient {
 			plan.meta.blockCount = plan.ops.size();
 		}
 		return PlanResult.success(plan);
+	}
+
+	private static BlockPos effectiveBuildSize(Selection buildSelection) {
+		BlockPos size = buildSelection.getSize();
+		if (size == null) {
+			return null;
+		}
+		// If both corners were clicked on the ground (same Y), the selection height is 1.
+		// For our MVP UX, treat this as a 2D footprint selection and allow a default build height.
+		if (size.getY() <= 1) {
+			return new BlockPos(size.getX(), DEFAULT_BUILD_HEIGHT, size.getZ());
+		}
+		return size;
 	}
 
 	private static JsonObject extractPlanJson(String body) {
@@ -256,7 +270,7 @@ public final class GumloopClient {
 		Request request = new Request();
 		request.prompt = prompt;
 		request.origin = toOrigin(buildSelection.getMin());
-		request.size = toSize(buildSelection.getSize());
+		request.size = toSize(effectiveBuildSize(buildSelection));
 		request.palette = defaultPalette();
 		request.maxBlocks = MAX_BLOCKS;
 		request.context = buildContext(player.getServerWorld(), contextSelection);

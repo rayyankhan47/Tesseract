@@ -41,6 +41,7 @@ public class TesseractMod implements ModInitializer {
 	private static final Item BUILD_WAND = Items.WOODEN_AXE;
 	private static final Item CONTEXT_WAND = Items.GOLDEN_AXE;
 	private static final int MAX_REGION_SIZE = 32;
+	private static final int DEFAULT_BUILD_HEIGHT = 12;
 	private static final String DEMO_CABIN_PROMPT = "Small cozy oak cabin with a peaked roof and a stone foundation";
 	private static final String DEMO_GATE_PROMPT = "Gothic stone gate entrance with torches and a central arch";
 
@@ -179,7 +180,8 @@ public class TesseractMod implements ModInitializer {
 
 		BuildJobManager.start(player.getUuid());
 		sendMessage(source, "Tesseract drafting: \"" + prompt + "\"");
-		sendMessage(source, "Selection size: " + size.getX() + "x" + size.getY() + "x" + size.getZ());
+		int effectiveHeight = (size != null && size.getY() <= 1) ? DEFAULT_BUILD_HEIGHT : size.getY();
+		sendMessage(source, "Selection footprint: " + size.getX() + "x" + size.getZ() + " (height " + effectiveHeight + ")");
 
 		Selection contextSelection = SelectionManager.getContextSelection(player.getUuid());
 		if (contextSelection != null && contextSelection.isComplete()) {
