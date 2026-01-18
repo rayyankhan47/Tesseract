@@ -204,42 +204,27 @@ h1 {
   border-radius: 0;
   padding: 0;
   box-shadow: none;
-  text-align: left;
+  text-align: center;
   opacity: 0;
   transform: translateY(10px);
   transition: opacity 0.6s ease, transform 0.6s ease;
 }
 
-.status-list {
-  display: grid;
-  gap: 12px;
-  margin-bottom: 18px;
-}
-
-.status-item {
-  font-size: 18px;
+.status-message {
+  font-size: clamp(20px, 2.4vw, 26px);
   font-weight: 600;
-  color: rgba(11, 11, 15, 0.35);
-  transition: color 0.3s ease;
-}
-
-.status-item.active {
-  color: rgba(11, 11, 15, 0.85);
-}
-
-.status-item.done {
-  color: rgba(11, 11, 15, 0.45);
+  color: rgba(11, 11, 15, 0.8);
+  letter-spacing: 0.01em;
 }
 
 .status-done {
-  border-top: 1px solid rgba(11, 11, 15, 0.1);
-  padding-top: 18px;
+  margin-top: 24px;
 }
 
 .done-title {
-  margin: 0 0 12px;
-  font-weight: 700;
-  color: rgba(11, 11, 15, 0.85);
+  margin: 0 0 8px;
+  font-weight: 800;
+  color: rgba(11, 11, 15, 0.9);
 }
 
 .done-url-row {
@@ -248,6 +233,7 @@ h1 {
   justify-content: space-between;
   gap: 12px;
   flex-wrap: wrap;
+  margin-top: 16px;
 }
 
 .done-url {
@@ -261,9 +247,9 @@ h1 {
 }
 
 .done-subtitle {
-  margin: 12px 0 0;
+  margin: 0;
   color: rgba(11, 11, 15, 0.6);
-  font-size: 14px;
+  font-size: 16px;
 }
 
 .is-generating .hero-content {
@@ -363,6 +349,7 @@ h1 {
   color: #c0392b;
   font-weight: 600;
   font-size: 14px;
+  text-align: center;
 }
 
 .hidden {

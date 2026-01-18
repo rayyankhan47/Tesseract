@@ -2,12 +2,11 @@ const promptInput = document.getElementById("promptInput");
 const imageInput = document.getElementById("imageInput");
 const generateButton = document.getElementById("generateButton");
 const resultLink = document.getElementById("resultLink");
-const resultMeta = document.getElementById("resultMeta");
 const resultError = document.getElementById("resultError");
 const copyButton = document.getElementById("copyButton");
 const statusPanel = document.getElementById("statusPanel");
 const statusDone = document.getElementById("statusDone");
-const statusItems = Array.from(document.querySelectorAll(".status-item"));
+const statusMessage = document.getElementById("statusMessage");
 const bodyEl = document.body;
 
 const baseText = "I want to build";
@@ -82,25 +81,14 @@ async function readFilesAsDataUrls(files) {
 }
 
 let statusTimers = [];
-let statusRevealTimer;
 
 function clearStatusTimers() {
   statusTimers.forEach((timer) => clearTimeout(timer));
   statusTimers = [];
-  if (statusRevealTimer) {
-    clearTimeout(statusRevealTimer);
-    statusRevealTimer = null;
-  }
 }
 
 function resetStatus() {
   clearStatusTimers();
-  statusItems.forEach((item, index) => {
-    item.classList.remove("done", "active");
-    if (index === 0) {
-      item.classList.add("active");
-    }
-  });
   statusDone?.classList.add("hidden");
   resultError?.classList.add("hidden");
   if (resultError) {
@@ -109,8 +97,9 @@ function resetStatus() {
   if (resultLink) {
     resultLink.textContent = "";
   }
-  if (resultMeta) {
-    resultMeta.textContent = "";
+  if (statusMessage) {
+    statusMessage.textContent = "Initializing...";
+    statusMessage.classList.remove("hidden");
   }
   if (copyButton) {
     copyButton.textContent = "Copy";
@@ -119,22 +108,13 @@ function resetStatus() {
 
 function startStatusSequence() {
   resetStatus();
-  const stepDelay = 15000;
-  const advance = (fromIndex, toIndex) => {
-    if (!statusItems[fromIndex] || !statusItems[toIndex]) {
-      return;
-    }
-    statusItems[fromIndex].classList.remove("active");
-    statusItems[fromIndex].classList.add("done");
-    statusItems[toIndex].classList.add("active");
-  };
-  statusTimers.push(setTimeout(() => advance(0, 1), stepDelay));
-  statusTimers.push(setTimeout(() => advance(1, 2), stepDelay * 2));
-  statusTimers.push(setTimeout(() => advance(2, 3), stepDelay * 3));
+  if (statusMessage) {
+    statusMessage.textContent = "This will only take a moment!";
+  }
 }
 
-function showResult({ url, size, error }) {
-  if (!resultLink || !resultMeta || !resultError) {
+function showResult({ url, error }) {
+  if (!resultLink || !resultError) {
     return;
   }
   resultError.classList.add("hidden");
@@ -143,15 +123,11 @@ function showResult({ url, size, error }) {
     resultError.textContent = error;
     resultError.classList.remove("hidden");
     resultLink.textContent = "";
-    resultMeta.textContent = "";
-    statusDone?.classList.remove("hidden");
     return;
   }
   resultLink.textContent = url;
-  if (size && size.w && size.h && size.l) {
-    resultMeta.textContent = `Done! Load up the Tesseract mod, select a ${size.w}x${size.h}x${size.l} area, and use /tesseract paste ${url} to see your build appear before your eyes.`;
-  } else {
-    resultMeta.textContent = `Done! Load up the Tesseract mod, select an area, and use /tesseract paste ${url} to see your build appear before your eyes.`;
+  if (statusMessage) {
+    statusMessage.classList.add("hidden");
   }
   statusDone?.classList.remove("hidden");
 }
@@ -168,11 +144,8 @@ async function handleGenerate() {
   generateButton.disabled = true;
   generateButton.textContent = "Generating...";
   bodyEl.classList.add("is-generating");
-  bodyEl.classList.remove("show-status");
+  bodyEl.classList.add("show-status");
   statusPanel?.classList.remove("hidden");
-  statusRevealTimer = setTimeout(() => {
-    bodyEl.classList.add("show-status");
-  }, 500);
   startStatusSequence();
 
   try {
@@ -186,8 +159,6 @@ async function handleGenerate() {
     if (!response.ok || payload.error) {
       throw new Error(payload.error || "Generate failed.");
     }
-    statusItems.forEach((item) => item.classList.add("done"));
-    statusItems.forEach((item) => item.classList.remove("active"));
     bodyEl.classList.add("show-status");
     showResult(payload);
   } catch (error) {

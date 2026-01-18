@@ -44,21 +44,16 @@
         </div>
       </div>
       <div class="status-panel hidden" id="statusPanel">
-        <div class="status-list">
-          <div class="status-item active" data-step="1">1. Initializing...</div>
-          <div class="status-item" data-step="2">2. Building...</div>
-          <div class="status-item" data-step="3">3. Validating...</div>
-          <div class="status-item" data-step="4">4. Almost done...</div>
-        </div>
+        <div class="status-message" id="statusMessage">Initializing...</div>
         <div class="status-done hidden" id="statusDone">
-          <p class="done-title">Done! Load up the Tesseract mod, select an area, and use:</p>
+          <h2 class="done-title">Done!</h2>
+          <p class="done-subtitle"><em>Let it be built before your eyes.</em></p>
           <div class="done-url-row">
             <code class="done-url" id="resultLink"></code>
             <button class="ghost-button" type="button" id="copyButton">Copy</button>
           </div>
-          <p class="done-subtitle" id="resultMeta"></p>
-          <p class="result-error hidden" id="resultError"></p>
         </div>
+        <p class="result-error hidden" id="resultError"></p>
       </div>
     </main>
 
