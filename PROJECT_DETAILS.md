@@ -17,7 +17,7 @@ export PATH="$JAVA_HOME/bin:$PATH"
 ```
 
 **To make it persistent**, add the above lines to your `~/.zshrc` file, then run `source ~/.zshrc`.
-
+**Then if necessary:** ./gradlew
 **Then run:** `./gradlew runClient`
 
 ---
