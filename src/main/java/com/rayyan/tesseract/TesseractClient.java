@@ -47,7 +47,7 @@ public class TesseractClient implements ClientModInitializer {
 
 	private void renderSelectionOutline(MatrixStack matrices, VertexConsumerProvider consumers, Vec3d cameraPos) {
 		MinecraftClient client = MinecraftClient.getInstance();
-		if (client.player == null) {
+		if (client.player == null || client.world == null) {
 			return;
 		}
 		Selection selection = SelectionManager.getBuildSelection(client.player.getUuid());
@@ -59,8 +59,13 @@ public class TesseractClient implements ClientModInitializer {
 		BlockPos cornerB = selection.getCornerB();
 		BlockPos targetPos = null;
 
-		if (cornerB == null && client.crosshairTarget instanceof BlockHitResult hit) {
-			targetPos = hit.getBlockPos();
+		if (cornerB == null) {
+			if (client.crosshairTarget instanceof BlockHitResult hit) {
+				targetPos = hit.getBlockPos();
+			}
+			if (targetPos == null) {
+				return;
+			}
 		}
 
 		BlockPos min;
