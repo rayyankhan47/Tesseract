@@ -80,6 +80,9 @@ public class TesseractClient implements ClientModInitializer {
 
 		RenderSystem.enableBlend();
 		RenderSystem.defaultBlendFunc();
+		RenderSystem.enableDepthTest();
+		RenderSystem.disableCull();
+		RenderSystem.depthMask(false);
 		RenderSystem.disableTexture();
 		RenderSystem.setShader(GameRenderer::getPositionColorShader);
 
@@ -95,6 +98,8 @@ public class TesseractClient implements ClientModInitializer {
 
 		tessellator.draw();
 		RenderSystem.enableTexture();
+		RenderSystem.depthMask(true);
+		RenderSystem.enableCull();
 		RenderSystem.disableBlend();
 		matrices.pop();
 	}
