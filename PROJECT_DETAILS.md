@@ -6,15 +6,17 @@ If anything in conversation becomes ambiguous later, **treat this file as canoni
 
 ---
 
-## ⚠️ SETUP REQUIRED: Environment Variable
+## ⚠️ SETUP REQUIRED: Environment Variables
 
-**BEFORE running the mod, you MUST set this environment variable:**
+**BEFORE running the mod, you MUST set these environment variables:**
 
 ```bash
 export GUMLOOP_WEBHOOK_URL="https://api.gumloop.com/api/v1/start_pipeline?api_key=50d96e74be0849609c62088c5102da28&user_id=TM6pLxGuKRd6jcUX2QlrXKlIx9K2&saved_item_id=1SMP5SVWn2pp7WKAekNqHH"
+export JAVA_HOME=$(/usr/libexec/java_home -v 17)
+export PATH="$JAVA_HOME/bin:$PATH"
 ```
 
-**To make it persistent**, add the above line to your `~/.zshrc` file, then run `source ~/.zshrc`.
+**To make it persistent**, add the above lines to your `~/.zshrc` file, then run `source ~/.zshrc`.
 
 **Then run:** `./gradlew runClient`
 
