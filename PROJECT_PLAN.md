@@ -264,11 +264,11 @@ Rules for using this plan:
 ### 7.1 Pre-tested prompts
 
 #### 7.1.1 Create 2 “demo prompts”
-- [ ] Cabin prompt
-- [ ] Gothic gate prompt
+- [x] Cabin prompt
+- [x] Gothic gate prompt
 
 #### 7.1.2 Add `/tesseract demo cabin` and `/tesseract demo gate` (optional)
-- [ ] Runs build with known-good prompts to reduce risk
+- [x] Runs build with known-good prompts to reduce risk
 
 ### 7.2 Observability
 

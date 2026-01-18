@@ -41,6 +41,8 @@ public class TesseractMod implements ModInitializer {
 	private static final Item BUILD_WAND = Items.WOODEN_AXE;
 	private static final Item CONTEXT_WAND = Items.GOLDEN_AXE;
 	private static final int MAX_REGION_SIZE = 32;
+	private static final String DEMO_CABIN_PROMPT = "Small cozy oak cabin with a peaked roof and a stone foundation";
+	private static final String DEMO_GATE_PROMPT = "Gothic stone gate entrance with torches and a central arch";
 
 	@Override
 	public void onInitialize() {
@@ -86,38 +88,17 @@ public class TesseractMod implements ModInitializer {
 					.then(argument("prompt", StringArgumentType.greedyString())
 						.executes(context -> {
 							ServerPlayerEntity player = context.getSource().getPlayer();
-							if (BuildJobManager.isInProgress(player.getUuid())) {
-								sendMessage(context.getSource(), "Build already in progress. Please wait.");
-								return 0;
-							}
-							Selection selection = SelectionManager.getBuildSelection(player.getUuid());
-							if (selection == null || !selection.isComplete()) {
-								sendMessage(context.getSource(), "Error: you haven't selected a region yet. Select two corners first.");
-								return 0;
-							}
-							BlockPos size = selection.getSize();
-							if (size == null) {
-								sendMessage(context.getSource(), "Error: invalid selection.");
-								return 0;
-							}
-							if (size.getX() > MAX_REGION_SIZE || size.getY() > MAX_REGION_SIZE || size.getZ() > MAX_REGION_SIZE) {
-								sendMessage(context.getSource(), "Error: selected region is too large (max 32x32x32).");
-								return 0;
-							}
-
 							String prompt = StringArgumentType.getString(context, "prompt");
-							BuildJobManager.start(player.getUuid());
-							sendMessage(context.getSource(), "Tesseract drafting: \"" + prompt + "\"");
-							sendMessage(context.getSource(), "Selection size: " + size.getX() + "x" + size.getY() + "x" + size.getZ());
-
-							Selection contextSelection = SelectionManager.getContextSelection(player.getUuid());
-							if (contextSelection != null && contextSelection.isComplete()) {
-								sendMessage(context.getSource(), "Context attached (cyan selection).");
-							}
-							GumloopClient.sendBuildRequest(player, selection, contextSelection, prompt);
-
-							return 1;
+							return startBuild(context.getSource(), player, prompt);
 						})
+					)
+				)
+				.then(literal("demo")
+					.then(literal("cabin")
+						.executes(context -> startBuild(context.getSource(), context.getSource().getPlayer(), DEMO_CABIN_PROMPT))
+					)
+					.then(literal("gate")
+						.executes(context -> startBuild(context.getSource(), context.getSource().getPlayer(), DEMO_GATE_PROMPT))
 					)
 				)
 			);
@@ -170,6 +151,42 @@ public class TesseractMod implements ModInitializer {
 
 	private static void sendMessage(ServerCommandSource source, String message) {
 		source.sendFeedback(Text.of(message), false);
+	}
+
+	private static int startBuild(ServerCommandSource source, ServerPlayerEntity player, String prompt) {
+		if (player == null) {
+			sendMessage(source, "Error: player not found.");
+			return 0;
+		}
+		if (BuildJobManager.isInProgress(player.getUuid())) {
+			sendMessage(source, "Build already in progress. Please wait.");
+			return 0;
+		}
+		Selection selection = SelectionManager.getBuildSelection(player.getUuid());
+		if (selection == null || !selection.isComplete()) {
+			sendMessage(source, "Error: you haven't selected a region yet. Select two corners first.");
+			return 0;
+		}
+		BlockPos size = selection.getSize();
+		if (size == null) {
+			sendMessage(source, "Error: invalid selection.");
+			return 0;
+		}
+		if (size.getX() > MAX_REGION_SIZE || size.getY() > MAX_REGION_SIZE || size.getZ() > MAX_REGION_SIZE) {
+			sendMessage(source, "Error: selected region is too large (max 32x32x32).");
+			return 0;
+		}
+
+		BuildJobManager.start(player.getUuid());
+		sendMessage(source, "Tesseract drafting: \"" + prompt + "\"");
+		sendMessage(source, "Selection size: " + size.getX() + "x" + size.getY() + "x" + size.getZ());
+
+		Selection contextSelection = SelectionManager.getContextSelection(player.getUuid());
+		if (contextSelection != null && contextSelection.isComplete()) {
+			sendMessage(source, "Context attached (cyan selection).");
+		}
+		GumloopClient.sendBuildRequest(player, selection, contextSelection, prompt);
+		return 1;
 	}
 
 	private static void handleCornerClick(UUID playerId, World world, BlockPos pos, boolean isBuild) {
