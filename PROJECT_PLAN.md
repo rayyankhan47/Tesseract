@@ -47,13 +47,13 @@ Rules for using this plan:
 ### 1.1 Create base Fabric project
 
 #### 1.1.1 Add Fabric example template
-- [ ] Download/unpack Fabric example mod for the 1.18 branch into repo root
+- [x] Download/unpack Fabric example mod for the 1.18 branch into repo root
 
 #### 1.1.2 Rename identifiers to “tesseract”
-- [ ] Mod id
-- [ ] Main class name
-- [ ] Package name
-- [ ] Display name
+- [x] Mod id
+- [x] Main class name
+- [x] Package name
+- [x] Display name
 
 #### 1.1.3 Confirm Gradle wrapper works
 - [ ] `./gradlew build` succeeds locally
@@ -61,10 +61,10 @@ Rules for using this plan:
 ### 1.2 Mod entrypoints and baseline command
 
 #### 1.2.1 Register `/tesseract` command
-- [ ] Command prints “Tesseract loaded” to player chat
+- [x] Command prints “Tesseract loaded” to player chat
 
 #### 1.2.2 Add `/tesseract help`
-- [ ] Prints available commands and basic usage
+- [x] Prints available commands and basic usage
 
 ---
 
