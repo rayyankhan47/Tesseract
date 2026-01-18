@@ -7,6 +7,7 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.google.gson.JsonPrimitive;
 import com.google.gson.JsonSyntaxException;
+import com.rayyan.tesseract.TesseractMod;
 import com.rayyan.tesseract.gumloop.GumloopPayload.BlockOp;
 import com.rayyan.tesseract.gumloop.GumloopPayload.Context;
 import com.rayyan.tesseract.gumloop.GumloopPayload.Origin;
@@ -33,6 +34,7 @@ public final class GumloopClient {
 	private static final int MAX_CONTEXT_BLOCKS = 500;
 	private static final int MAX_BLOCKS = 600;
 	private static final int DEFAULT_BUILD_HEIGHT = 12;
+	private static final int LOG_BODY_PREVIEW = 240;
 	private static final Gson GSON = new Gson();
 	private static final HttpClient CLIENT = HttpClient.newHttpClient();
 
@@ -45,8 +47,15 @@ public final class GumloopClient {
 			return;
 		}
 
+		String requestId = "req-" + System.currentTimeMillis() + "-" + player.getUuid().toString().substring(0, 8);
+		long startNanos = System.nanoTime();
 		Request request = buildRequest(player, buildSelection, contextSelection, prompt);
 		String json = GSON.toJson(request);
+		TesseractMod.LOGGER.info("Gumloop {} -> sending request (size={}, contextBlocks={}, hasScreenshot={})",
+			requestId,
+			request.size == null ? "unknown" : request.size.w + "x" + request.size.h + "x" + request.size.l,
+			request.context == null || request.context.blocks == null ? 0 : request.context.blocks.size(),
+			request.context != null && request.context.screenshot != null);
 
 		HttpRequest httpRequest = HttpRequest.newBuilder()
 			.uri(URI.create(webhook))
@@ -61,20 +70,35 @@ public final class GumloopClient {
 					return;
 				}
 				player.getServer().execute(() -> {
+					long elapsedMs = (System.nanoTime() - startNanos) / 1_000_000L;
 					if (error != null) {
-						player.sendMessage(Text.of("Error: Gumloop request failed: " + error.getMessage()), false);
+						TesseractMod.LOGGER.error("Gumloop {} -> request failed after {}ms: {}", requestId, elapsedMs, error.toString());
+						player.sendMessage(Text.of("Error: Gumloop request failed (request " + requestId + ")."), false);
+						com.rayyan.tesseract.jobs.BuildJobManager.finish(player.getUuid());
+						return;
+					}
+					if (response == null) {
+						TesseractMod.LOGGER.error("Gumloop {} -> null response after {}ms.", requestId, elapsedMs);
+						player.sendMessage(Text.of("Error: Gumloop response was empty (request " + requestId + ")."), false);
 						com.rayyan.tesseract.jobs.BuildJobManager.finish(player.getUuid());
 						return;
 					}
 					int status = response.statusCode();
+					String body = response.body();
+					TesseractMod.LOGGER.info("Gumloop {} -> status={} in {}ms (bodyLen={})",
+						requestId,
+						status,
+						elapsedMs,
+						body == null ? 0 : body.length());
 					if (status < 200 || status >= 300) {
-						player.sendMessage(Text.of("Error: Gumloop returned status " + status), false);
+						TesseractMod.LOGGER.warn("Gumloop {} -> non-2xx response: {}", requestId, preview(body));
+						player.sendMessage(Text.of("Error: Gumloop returned status " + status + " (request " + requestId + ")."), false);
 						com.rayyan.tesseract.jobs.BuildJobManager.finish(player.getUuid());
 						return;
 					}
-					PlanResult planResult = parseAndValidatePlan(response.body(), buildSelection);
+					PlanResult planResult = parseAndValidatePlan(body, buildSelection, requestId);
 					if (planResult.error != null) {
-						player.sendMessage(Text.of("Error: " + planResult.error), false);
+						player.sendMessage(Text.of("Error: " + planResult.error + " (request " + requestId + ")."), false);
 						com.rayyan.tesseract.jobs.BuildJobManager.finish(player.getUuid());
 						return;
 					}
@@ -86,27 +110,31 @@ public final class GumloopClient {
 					}
 					boolean queued = BuildQueueManager.startBuild(player, buildSelection, plan);
 					if (!queued) {
-						player.sendMessage(Text.of("Error: failed to start build."), false);
+						player.sendMessage(Text.of("Error: failed to start build (request " + requestId + ")."), false);
 						com.rayyan.tesseract.jobs.BuildJobManager.finish(player.getUuid());
 					}
 				});
 			});
 	}
 
-	private static PlanResult parseAndValidatePlan(String body, Selection buildSelection) {
+	private static PlanResult parseAndValidatePlan(String body, Selection buildSelection, String requestId) {
 		if (body == null || body.isBlank()) {
+			TesseractMod.LOGGER.warn("Gumloop {} -> empty response body.", requestId);
 			return PlanResult.error("Gumloop returned empty response.");
 		}
 		BlockPos size = effectiveBuildSize(buildSelection);
 		if (size == null) {
+			TesseractMod.LOGGER.warn("Gumloop {} -> invalid selection size.", requestId);
 			return PlanResult.error("Invalid build selection size.");
 		}
 		JsonObject planJson = extractPlanJson(body);
 		if (planJson == null) {
+			TesseractMod.LOGGER.warn("Gumloop {} -> missing plan JSON. Body preview: {}", requestId, preview(body));
 			return PlanResult.error("Could not find build plan in Gumloop response.");
 		}
 		String validationError = validatePlan(planJson, size, defaultPalette(), MAX_BLOCKS);
 		if (validationError != null) {
+			TesseractMod.LOGGER.warn("Gumloop {} -> validation failed: {}", requestId, validationError);
 			return PlanResult.error(validationError);
 		}
 		GumloopPayload.Response plan = GSON.fromJson(planJson, GumloopPayload.Response.class);
@@ -246,6 +274,16 @@ public final class GumloopClient {
 			return null;
 		}
 		return primitive.getAsString();
+	}
+
+	private static String preview(String body) {
+		if (body == null) {
+			return "<null>";
+		}
+		if (body.length() <= LOG_BODY_PREVIEW) {
+			return body;
+		}
+		return body.substring(0, LOG_BODY_PREVIEW) + "...";
 	}
 
 	private static final class PlanResult {

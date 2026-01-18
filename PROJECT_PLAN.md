@@ -273,10 +273,10 @@ Rules for using this plan:
 ### 7.2 Observability
 
 #### 7.2.1 Log Gumloop request/response metadata
-- [ ] Request id, timing, retries (if returned)
+- [x] Request id, timing, retries (if returned)
 
 #### 7.2.2 Friendly error surfacing
-- [ ] Fail loudly and clearly, never silently
+- [x] Fail loudly and clearly, never silently
 
 ---
 
