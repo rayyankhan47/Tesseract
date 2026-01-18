@@ -2,7 +2,7 @@
 
 Use three terminals: one for Minecraft, one for the plan server, one for the web server.
 
-## 1) Minecraft mod
+## 1 Minecraft mod
 ```bash
 cd /Users/rayyan/Desktop/cs/dev/hackathons/tesseract
 export GUMLOOP_WEBHOOK_URL="YOUR_GUMLOOP_WEBHOOK_URL"
@@ -11,13 +11,13 @@ export PATH="$JAVA_HOME/bin:$PATH"
 ./gradlew runClient
 ```
 
-## 2) URL tools (plan server)
+## 2 URL tools (plan server)
 ```bash
 cd /Users/rayyan/Desktop/cs/dev/hackathons/tesseract
 python3 tools/plan_server.py
 ```
 
-## 3) Web server
+## 3 Web server
 ```bash
 cd /Users/rayyan/Desktop/cs/dev/hackathons/tesseract/web
 export GUMLOOP_WEBHOOK_URL="YOUR_GUMLOOP_WEBHOOK_URL"
