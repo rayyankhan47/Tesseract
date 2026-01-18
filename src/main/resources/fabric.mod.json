@@ -19,6 +19,9 @@
   "entrypoints": {
     "main": [
       "com.rayyan.tesseract.TesseractMod"
+    ],
+    "client": [
+      "com.rayyan.tesseract.TesseractClient"
     ]
   },
 

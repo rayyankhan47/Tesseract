@@ -2,10 +2,23 @@ package com.rayyan.tesseract;
 
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.command.v1.CommandRegistrationCallback;
+import net.fabricmc.fabric.api.event.player.AttackBlockCallback;
+import net.fabricmc.fabric.api.event.player.UseBlockCallback;
 import net.minecraft.server.command.ServerCommandSource;
 import net.minecraft.text.Text;
+import net.minecraft.util.ActionResult;
+import net.minecraft.util.Hand;
+import net.minecraft.util.math.BlockPos;
+import net.minecraft.world.World;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import com.rayyan.tesseract.selection.Selection;
+import com.rayyan.tesseract.selection.SelectionManager;
+import net.minecraft.item.Item;
+import net.minecraft.item.Items;
+
+import java.util.UUID;
 
 import static net.minecraft.server.command.CommandManager.literal;
 
@@ -14,6 +27,8 @@ public class TesseractMod implements ModInitializer {
 	// It is considered best practice to use your mod id as the logger's name.
 	// That way, it's clear which mod wrote info, warnings, and errors.
 	public static final Logger LOGGER = LoggerFactory.getLogger("tesseract");
+	private static final Item BUILD_WAND = Items.WOODEN_AXE;
+	private static final Item CONTEXT_WAND = Items.GOLDEN_AXE;
 
 	@Override
 	public void onInitialize() {
@@ -35,11 +50,92 @@ public class TesseractMod implements ModInitializer {
 						return 1;
 					})
 				)
+				.then(literal("clear")
+					.executes(context -> {
+						SelectionManager.clearBuildSelection(context.getSource().getPlayer().getUuid());
+						sendMessage(context.getSource(), "Build selection cleared.");
+						return 1;
+					})
+				)
+				.then(literal("context")
+					.then(literal("clear")
+						.executes(context -> {
+							SelectionManager.clearContextSelection(context.getSource().getPlayer().getUuid());
+							sendMessage(context.getSource(), "Context selection cleared.");
+							return 1;
+						})
+					)
+				)
 			);
+		});
+
+		AttackBlockCallback.EVENT.register((player, world, hand, pos, direction) -> {
+			if (hand != Hand.MAIN_HAND) {
+				return ActionResult.PASS;
+			}
+			Item held = player.getStackInHand(hand).getItem();
+			if (held == BUILD_WAND) {
+				setCorner(player.getUuid(), world, pos, true, true);
+				return ActionResult.SUCCESS;
+			}
+			if (held == CONTEXT_WAND) {
+				setCorner(player.getUuid(), world, pos, true, false);
+				return ActionResult.SUCCESS;
+			}
+			return ActionResult.PASS;
+		});
+
+		UseBlockCallback.EVENT.register((player, world, hand, hitResult) -> {
+			if (hand != Hand.MAIN_HAND) {
+				return ActionResult.PASS;
+			}
+			Item held = player.getStackInHand(hand).getItem();
+			BlockPos pos = hitResult.getBlockPos();
+			if (held == BUILD_WAND) {
+				setCorner(player.getUuid(), world, pos, false, true);
+				return ActionResult.SUCCESS;
+			}
+			if (held == CONTEXT_WAND) {
+				setCorner(player.getUuid(), world, pos, false, false);
+				return ActionResult.SUCCESS;
+			}
+			return ActionResult.PASS;
 		});
 	}
 
 	private static void sendMessage(ServerCommandSource source, String message) {
+		source.sendFeedback(Text.of(message), false);
+	}
+
+	private static void setCorner(UUID playerId, World world, BlockPos pos, boolean isCornerA, boolean isBuild) {
+		Selection selection = isBuild
+			? SelectionManager.getBuildSelection(playerId)
+			: SelectionManager.getContextSelection(playerId);
+
+		if (isCornerA) {
+			selection.setCornerA(pos);
+		} else {
+			selection.setCornerB(pos);
+		}
+		if (!world.isClient) {
+			sendMessageToPlayer(world, playerId, formatCornerMessage(isBuild, isCornerA, pos));
+		}
+	}
+
+	private static String formatCornerMessage(boolean isBuild, boolean isCornerA, BlockPos pos) {
+		String which = isCornerA ? "Corner A" : "Corner B";
+		String type = isBuild ? "Build" : "Context";
+		return type + " " + which + " set: " + pos.getX() + " " + pos.getY() + " " + pos.getZ();
+	}
+
+	private static void sendMessageToPlayer(World world, UUID playerId, String message) {
+		if (world.getServer() == null) {
+			return;
+		}
+		if (world.getServer().getPlayerManager().getPlayer(playerId) == null) {
+			return;
+		}
+		ServerCommandSource source = world.getServer().getPlayerManager().getPlayer(playerId).getCommandSource();
 		source.sendFeedback(Text.of(message), false);
 	}
 }

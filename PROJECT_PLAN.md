@@ -73,42 +73,42 @@ Rules for using this plan:
 ### 2.1 Data model
 
 #### 2.1.1 Define a `Selection` object
-- [ ] Stores cornerA (optional) and cornerB (optional)
-- [ ] Computes min/max corners
-- [ ] Computes origin + size `{w,h,l}`
+- [x] Stores cornerA (optional) and cornerB (optional)
+- [x] Computes min/max corners
+- [x] Computes origin + size `{w,h,l}`
 
 #### 2.1.2 Store selections per player
-- [ ] Map keyed by player UUID → build `Selection`
-- [ ] Map keyed by player UUID → context `Selection`
-- [ ] Clears on `/tesseract clear` (build selection)
-- [ ] Clears on `/tesseract context clear` (context selection)
+- [x] Map keyed by player UUID → build `Selection`
+- [x] Map keyed by player UUID → context `Selection`
+- [x] Clears on `/tesseract clear` (build selection)
+- [x] Clears on `/tesseract context clear` (context selection)
 
 ### 2.2 Wand behavior (corner setting)
 
 #### 2.2.1 Choose wand UX
-- [ ] Decide which item triggers build selection (e.g. wooden axe)
-- [ ] Decide which item triggers context selection (a different item)
-- [ ] Left-click sets Corner A, right-click sets Corner B (or consistent alternative)
+- [x] Decide which item triggers build selection (e.g. wooden axe)
+- [x] Decide which item triggers context selection (a different item)
+- [x] Left-click sets Corner A, right-click sets Corner B (or consistent alternative)
 
 #### 2.2.2 Hook interaction events
-- [ ] On click, record block position as corner (depending on which wand)
-- [ ] Send chat confirmation “Corner A set: x y z” / “Corner B set: x y z”
+- [x] On click, record block position as corner (depending on which wand)
+- [x] Send chat confirmation “Corner A set: x y z” / “Corner B set: x y z”
 
 #### 2.2.3 Normalize corners
-- [ ] After both corners set, compute min/max and store normalized selection
+- [x] After both corners set, compute min/max and store normalized selection
 
 ### 2.3 Selection overlay rendering (filled ground tint)
 
 #### 2.3.1 Decide overlay style parameters
-- [ ] Color (e.g. cyan/blue)
-- [ ] Alpha (translucent)
+- [x] Color (e.g. cyan/blue)
+- [x] Alpha (translucent)
 - [ ] Render only within a max distance from player (optional perf guard)
 
 #### 2.3.2 Implement client-side rendering hook
-- [ ] Each frame/tick, if selection complete, render a translucent overlay on ground blocks in x–z rectangle
+- [x] Each frame/tick, if selection complete, render a translucent overlay on ground blocks in x–z rectangle
 
 #### 2.3.3 Performance guardrails
-- [ ] If selected area too large, render simplified overlay or refuse selection
+- [x] If selected area too large, render simplified overlay or refuse selection
 
 ### 2.4 “Diff highlight” overlay (after build finishes)
 #### 2.4.1 (De-scoped)
