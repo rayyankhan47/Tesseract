@@ -1,0 +1,345 @@
+# Tesseract — MVP Build Plan (Step-by-step)
+
+This is the **execution plan** we will follow for the hackathon MVP.
+
+Rules for using this plan:
+
+- We will implement **one subsubstep at a time** (e.g. 2.1.3), then mark it done here.
+- If a step changes scope, we update both this file and `PROJECT_DETAILS.md`.
+- “Done” means working in-game (or at minimum compiled + logically complete if blocked by environment).
+
+---
+
+## 0. Scope Lock (Do not build beyond this until stable)
+
+### 0.1 MVP constraints (must implement)
+
+#### 0.1.1 Region size cap
+- [ ] Default cap: 32×32×32
+- [ ] Reject larger region with clear error message
+
+#### 0.1.2 Build operation cap
+- [ ] Default cap: 8000 block ops
+- [ ] Reject plans exceeding cap
+
+#### 0.1.3 Whitelist-only block placement
+- [ ] Define a small block whitelist (IDs include `minecraft:` prefix)
+- [ ] Reject any block not on whitelist
+
+### 0.2 MVP “wow” requirements
+
+#### 0.2.1 Selection overlay
+- [ ] After selecting two corners, show a **filled translucent ground tint** over the selected area
+
+#### 0.2.2 Progressive building
+- [ ] Place blocks in batches over time (configurable rate)
+- [ ] Show progress feedback in chat
+
+#### 0.2.3 Cancellation
+- [ ] `/tesseract cancel` stops the build queue immediately
+
+#### 0.2.4 Cursor-like confirmation (Keep/Undo)
+- [ ] After generation/modification completes, highlight changed blocks
+- [ ] Provide chat actions: **Keep all** / **Undo all**
+- [ ] Provide command fallbacks: `/tesseract keep`, `/tesseract undo`
+
+#### 0.2.5 Context-aware generation
+- [ ] Select a “context” region (separate wand)
+- [ ] Send context snapshot to Gumloop so the AI can imitate style
+
+---
+
+## 1. Repository Scaffolding (Fabric 1.18.2)
+
+### 1.1 Create base Fabric project
+
+#### 1.1.1 Add Fabric example template
+- [ ] Download/unpack Fabric example mod for the 1.18 branch into repo root
+
+#### 1.1.2 Rename identifiers to “tesseract”
+- [ ] Mod id
+- [ ] Main class name
+- [ ] Package name
+- [ ] Display name
+
+#### 1.1.3 Confirm Gradle wrapper works
+- [ ] `./gradlew build` succeeds locally
+
+### 1.2 Mod entrypoints and baseline command
+
+#### 1.2.1 Register `/tesseract` command
+- [ ] Command prints “Tesseract loaded” to player chat
+
+#### 1.2.2 Add `/tesseract help`
+- [ ] Prints available commands and basic usage
+
+---
+
+## 2. Region Selection (Two corners per player)
+
+### 2.1 Data model
+
+#### 2.1.1 Define a `Selection` object
+- [ ] Stores cornerA (optional) and cornerB (optional)
+- [ ] Computes min/max corners
+- [ ] Computes origin + size `{w,h,l}`
+
+#### 2.1.2 Store selections per player
+- [ ] Map keyed by player UUID → build `Selection`
+- [ ] Map keyed by player UUID → context `Selection`
+- [ ] Clears on `/tesseract clear` (build selection)
+- [ ] Clears on `/tesseract context clear` (context selection)
+
+### 2.2 Wand behavior (corner setting)
+
+#### 2.2.1 Choose wand UX
+- [ ] Decide which item triggers build selection (e.g. wooden axe)
+- [ ] Decide which item triggers context selection (a different item)
+- [ ] Left-click sets Corner A, right-click sets Corner B (or consistent alternative)
+
+#### 2.2.2 Hook interaction events
+- [ ] On click, record block position as corner (depending on which wand)
+- [ ] Send chat confirmation “Corner A set: x y z” / “Corner B set: x y z”
+
+#### 2.2.3 Normalize corners
+- [ ] After both corners set, compute min/max and store normalized selection
+
+### 2.3 Selection overlay rendering (filled ground tint)
+
+#### 2.3.1 Decide overlay style parameters
+- [ ] Color (e.g. cyan/blue)
+- [ ] Alpha (translucent)
+- [ ] Render only within a max distance from player (optional perf guard)
+
+#### 2.3.2 Implement client-side rendering hook
+- [ ] Each frame/tick, if selection complete, render a translucent overlay on ground blocks in x–z rectangle
+
+#### 2.3.3 Performance guardrails
+- [ ] If selected area too large, render simplified overlay or refuse selection
+
+### 2.4 “Diff highlight” overlay (after build finishes)
+
+#### 2.4.1 Track changed blocks in the last transaction
+- [ ] Maintain a per-player list/set of changed block positions (and prior states)
+
+#### 2.4.2 Render highlight overlay on changed blocks
+- [ ] After job completes, render translucent highlight for changed positions until Keep/Undo
+
+#### 2.4.3 Clear highlight on finalize
+- [ ] Keep: clear highlight + discard stored prior states
+- [ ] Undo: revert blocks + clear highlight
+
+---
+
+## 3. Commands UX (Build, Cancel, Clear)
+
+### 3.1 `/tesseract build <prompt...>`
+
+#### 3.1.1 Parse prompt string
+- [ ] Allow multi-word prompt (rest-of-line)
+
+#### 3.1.2 Validate selection exists
+- [ ] If not selected: error message
+
+#### 3.1.3 Validate region size cap
+- [ ] If too large: error message
+
+#### 3.1.4 Trigger build pipeline
+- [ ] Start “drafting…” message
+- [ ] Disable starting a second build concurrently (or auto-cancel previous)
+
+#### 3.1.5 Support context-aware prompting (optional)
+- [ ] If a context selection exists, include it in the Gumloop request
+
+### 3.2 `/tesseract cancel`
+
+#### 3.2.1 Stop active queue
+- [ ] Cancel immediately
+
+#### 3.2.2 User feedback
+- [ ] “Build cancelled.”
+
+### 3.3 `/tesseract clear`
+
+#### 3.3.1 Clear selection
+- [ ] Remove stored corners
+
+#### 3.3.2 Clear overlay state
+- [ ] Overlay disappears immediately
+
+### 3.4 Keep/Undo commands
+
+#### 3.4.1 `/tesseract keep`
+- [ ] Finalize the last completed transaction (if pending)
+
+#### 3.4.2 `/tesseract undo`
+- [ ] Revert the last completed transaction (if pending)
+
+#### 3.4.3 Chat click actions
+- [ ] At the end of a run, print clickable **Keep all** / **Undo all** actions that run the commands
+
+---
+
+## 4. Gumloop Integration (Webhook “Build Compiler”)
+
+### 4.1 Workflow contract design
+
+#### 4.1.1 Define request JSON
+- [ ] `prompt`
+- [ ] `origin` (world coords)
+- [ ] `size` (w,h,l)
+- [ ] `palette`
+- [ ] `maxBlocks`
+- [ ] `mode` ("create" | "modify") (optional for MVP, but planned)
+- [ ] `context` (optional): `{ origin, size, blocks[] }`
+
+#### 4.1.2 Define response JSON
+- [ ] `meta` (theme, blockCount, warnings)
+- [ ] `ops` list `{x,y,z,block}`
+
+### 4.2 Gumloop workflow implementation (inside Gumloop UI)
+
+#### 4.2.1 Webhook trigger node
+- [ ] Accept request payload
+
+#### 4.2.2 LLM generation node
+- [ ] Prompt includes strict JSON-only output rules + bounds + palette
+
+#### 4.2.3 Verifier node (hard validation)
+- [ ] Reject out-of-bounds ops
+- [ ] Reject disallowed blocks
+- [ ] Reject ops length > maxBlocks
+
+#### 4.2.4 Retry strategy
+- [ ] If invalid, feed error back and retry up to N times (e.g. 2)
+- [ ] If still invalid, return an error payload (consistent shape)
+
+### 4.3 Mod HTTP client + timeout behavior
+
+#### 4.3.1 Add configurable Gumloop endpoint
+- [ ] Store webhook URL in config/env
+
+#### 4.3.2 Perform request asynchronously
+- [ ] Do not freeze server thread
+
+#### 4.3.3 Timeouts and error messages
+- [ ] On timeout/failure: message to player + do not start build
+
+---
+
+## 5. Plan Parsing & Validation (in the mod)
+
+### 5.1 JSON parsing
+
+#### 5.1.1 Add JSON library (or use built-in approach)
+- [ ] Parse response JSON into Java objects
+
+#### 5.1.2 Handle invalid JSON
+- [ ] Show “AI returned invalid JSON” error
+
+### 5.2 Validation rules (must be enforced even if Gumloop validates)
+
+#### 5.2.1 Bounds validation
+- [ ] Every op within `[0..w-1],[0..h-1],[0..l-1]`
+
+#### 5.2.2 Whitelist validation
+- [ ] Every op block is in palette whitelist
+
+#### 5.2.3 Max blocks validation
+- [ ] `ops.length <= maxBlocks`
+
+#### 5.2.4 Safe execution guards
+- [ ] Do not place blocks in unloaded chunks (either require loaded area or handle carefully)
+
+#### 5.2.5 Modification safety rule (MVP)
+- [ ] Default rule: `onlyPlaceInAir=true` for “create”
+- [ ] For “modify”, allow replacements but still record prior state for undo
+
+---
+
+## 6. Progressive Builder (Queue + Rate Limit)
+
+### 6.1 Queue design
+
+#### 6.1.1 Represent a build job
+- [ ] Player who requested it
+- [ ] Origin, size
+- [ ] Ops list
+- [ ] Current index/progress
+- [ ] Mode: create/modify
+- [ ] Transaction: list of `{pos, beforeState, afterState}` for undo/preview
+
+#### 6.1.2 Prevent concurrent build conflicts
+- [ ] One active build per player (MVP)
+
+### 6.2 Scheduling placements
+
+#### 6.2.1 Place blocks server-side
+- [ ] Ensure world mutation happens on correct thread/tick
+
+#### 6.2.2 Batch size / speed config
+- [ ] Example: 50–200 blocks/sec (tune)
+
+#### 6.2.3 Progress messages
+- [ ] Update every N blocks or every second
+
+### 6.3 Cancellation
+
+#### 6.3.1 Cancel mid-build
+- [ ] Stops future placements immediately
+
+#### 6.3.2 Post-cancel cleanup
+- [ ] Clear job state so a new build can start
+
+### 6.4 End-of-job confirmation
+
+#### 6.4.1 Enter “pending confirmation” state
+- [ ] After job finishes, mark transaction as pending
+
+#### 6.4.2 Display Keep/Undo UI
+- [ ] Chat click actions + fallback commands
+
+#### 6.4.3 Finalize or revert
+- [ ] Keep clears stored beforeStates
+- [ ] Undo restores beforeStates
+
+---
+
+## 7. Demo Hardening (Reliability > Features)
+
+### 7.1 Pre-tested prompts
+
+#### 7.1.1 Create 2 “demo prompts”
+- [ ] Cabin prompt
+- [ ] Gothic gate prompt
+
+#### 7.1.2 Add `/tesseract demo cabin` and `/tesseract demo gate` (optional)
+- [ ] Runs build with known-good prompts to reduce risk
+
+### 7.2 Observability
+
+#### 7.2.1 Log Gumloop request/response metadata
+- [ ] Request id, timing, retries (if returned)
+
+#### 7.2.2 Friendly error surfacing
+- [ ] Fail loudly and clearly, never silently
+
+---
+
+## 8. Stretch Goals (Only after MVP is stable)
+
+### 8.1 Undo (soft)
+
+#### 8.1.1 Timeouts for Keep/Undo
+- [ ] If player does nothing, auto-keep or auto-undo after X seconds (pick a default)
+
+### 8.2 “Fill ops” compression
+
+#### 8.2.1 Add optional op type
+- [ ] Support fill cuboids to reduce op count
+
+### 8.3 Optional decorative redstone
+
+#### 8.3.1 Expand whitelist cautiously
+- [ ] Add `redstone_torch`, `redstone_wire`, `lever` only
+
