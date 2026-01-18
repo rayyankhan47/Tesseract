@@ -31,8 +31,10 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 
 public final class GumloopClient {
@@ -546,13 +548,17 @@ public final class GumloopClient {
 		Context context = new Context();
 		context.origin = toOrigin(contextSelection.getMin());
 		context.size = toSize(contextSelection.getSize());
-		context.blocks = captureBlocks(world, contextSelection);
+		context.blocks = captureBlocks(world, contextSelection, defaultPalette());
+		if (context.blocks.isEmpty()) {
+			return null;
+		}
 		context.screenshot = null;
 		return context;
 	}
 
-	private static List<BlockOp> captureBlocks(ServerWorld world, Selection selection) {
+	private static List<BlockOp> captureBlocks(ServerWorld world, Selection selection, List<String> palette) {
 		List<BlockOp> blocks = new ArrayList<>();
+		Set<String> paletteSet = new HashSet<>(palette);
 		BlockPos min = selection.getMin();
 		BlockPos max = selection.getMax();
 		if (min == null || max == null) {
@@ -571,11 +577,15 @@ public final class GumloopClient {
 					if (state.isAir()) {
 						continue;
 					}
+					String blockId = Registry.BLOCK.getId(state.getBlock()).toString();
+					if (!paletteSet.contains(blockId)) {
+						continue;
+					}
 					BlockOp op = new BlockOp();
 					op.x = x - min.getX();
 					op.y = y - min.getY();
 					op.z = z - min.getZ();
-					op.block = Registry.BLOCK.getId(state.getBlock()).toString();
+					op.block = blockId;
 					blocks.add(op);
 				}
 			}
