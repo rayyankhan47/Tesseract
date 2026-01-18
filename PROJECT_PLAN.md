@@ -220,7 +220,7 @@ Rules for using this plan:
 - [x] `ops.length <= maxBlocks`
 
 #### 5.2.4 Safe execution guards
-- [ ] Do not place blocks in unloaded chunks (either require loaded area or handle carefully)
+- [x] Do not place blocks in unloaded chunks (either require loaded area or handle carefully)
 
 #### 5.2.5 Modification safety rule (MVP)
 - [ ] Default rule: for “generation”, allow replacements inside the region but record prior state for undo/preview
@@ -233,29 +233,29 @@ Rules for using this plan:
 ### 6.1 Queue design
 
 #### 6.1.1 Represent a build job
-- [ ] Player who requested it
-- [ ] Origin, size
-- [ ] Ops list
-- [ ] Current index/progress
+- [x] Player who requested it
+- [x] Origin, size
+- [x] Ops list
+- [x] Current index/progress
 
 #### 6.1.2 Prevent concurrent build conflicts
-- [ ] One active build per player (MVP)
+- [x] One active build per player (MVP)
 
 ### 6.2 Scheduling placements
 
 #### 6.2.1 Place blocks server-side
-- [ ] Ensure world mutation happens on correct thread/tick
+- [x] Ensure world mutation happens on correct thread/tick
 
 #### 6.2.2 Batch size / speed config
-- [ ] Example: 50–200 blocks/sec (tune)
+- [x] Example: 50–200 blocks/sec (tune)
 
 #### 6.2.3 Progress messages
-- [ ] Update every N blocks or every second
+- [x] Update every N blocks or every second
 
 ### 6.3 End-of-job behavior
 
 #### 6.3.1 Completion message
-- [ ] After job finishes, announce completion and basic stats (blocks placed, duration)
+- [x] After job finishes, announce completion and basic stats (blocks placed, duration)
 
 ---
 

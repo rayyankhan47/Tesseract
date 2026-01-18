@@ -19,6 +19,7 @@ import org.slf4j.LoggerFactory;
 
 import com.rayyan.tesseract.gumloop.GumloopClient;
 import com.rayyan.tesseract.jobs.BuildJobManager;
+import com.rayyan.tesseract.jobs.BuildQueueManager;
 import com.rayyan.tesseract.network.SelectionNetworking;
 import com.rayyan.tesseract.selection.Selection;
 import com.rayyan.tesseract.selection.SelectionManager;
@@ -122,7 +123,10 @@ public class TesseractMod implements ModInitializer {
 			);
 		});
 
-		ServerTickEvents.END_SERVER_TICK.register(server -> BuildJobManager.tick());
+		ServerTickEvents.END_SERVER_TICK.register(server -> {
+			BuildJobManager.tick();
+			BuildQueueManager.tick(server);
+		});
 
 		AttackBlockCallback.EVENT.register((player, world, hand, pos, direction) -> {
 			if (world.isClient) {

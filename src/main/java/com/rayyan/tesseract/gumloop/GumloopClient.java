@@ -12,6 +12,7 @@ import com.rayyan.tesseract.gumloop.GumloopPayload.Context;
 import com.rayyan.tesseract.gumloop.GumloopPayload.Origin;
 import com.rayyan.tesseract.gumloop.GumloopPayload.Request;
 import com.rayyan.tesseract.gumloop.GumloopPayload.Size;
+import com.rayyan.tesseract.jobs.BuildQueueManager;
 import com.rayyan.tesseract.selection.Selection;
 import net.minecraft.block.BlockState;
 import net.minecraft.server.network.ServerPlayerEntity;
@@ -82,8 +83,11 @@ public final class GumloopClient {
 					if (plan.meta != null && plan.meta.warnings != null && !plan.meta.warnings.isEmpty()) {
 						player.sendMessage(Text.of("Warnings: " + String.join("; ", plan.meta.warnings)), false);
 					}
-					// TODO (Step 6): enqueue plan for progressive building.
-					com.rayyan.tesseract.jobs.BuildJobManager.finish(player.getUuid());
+					boolean queued = BuildQueueManager.startBuild(player, buildSelection, plan);
+					if (!queued) {
+						player.sendMessage(Text.of("Error: failed to start build."), false);
+						com.rayyan.tesseract.jobs.BuildJobManager.finish(player.getUuid());
+					}
 				});
 			});
 	}
