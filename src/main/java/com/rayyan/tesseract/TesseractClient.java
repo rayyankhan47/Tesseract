@@ -11,7 +11,9 @@ import net.minecraft.client.util.math.MatrixStack;
 import net.minecraft.client.render.RenderLayer;
 import net.minecraft.client.render.VertexConsumer;
 import net.minecraft.client.render.VertexConsumerProvider;
+import net.minecraft.entity.Entity;
 import net.minecraft.util.hit.BlockHitResult;
+import net.minecraft.util.hit.HitResult;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Matrix4f;
 import net.minecraft.util.math.Vec3d;
@@ -42,10 +44,11 @@ public class TesseractClient implements ClientModInitializer {
 				}
 			});
 		});
-		WorldRenderEvents.LAST.register(context -> renderSelectionOutline(context.matrixStack(), context.consumers(), context.camera().getPos()));
+		WorldRenderEvents.LAST.register(context ->
+			renderSelectionOutline(context.matrixStack(), context.consumers(), context.camera().getPos(), context.tickDelta()));
 	}
 
-	private void renderSelectionOutline(MatrixStack matrices, VertexConsumerProvider consumers, Vec3d cameraPos) {
+	private void renderSelectionOutline(MatrixStack matrices, VertexConsumerProvider consumers, Vec3d cameraPos, float tickDelta) {
 		MinecraftClient client = MinecraftClient.getInstance();
 		if (client.player == null || client.world == null) {
 			return;
@@ -60,9 +63,7 @@ public class TesseractClient implements ClientModInitializer {
 		BlockPos targetPos = null;
 
 		if (cornerB == null) {
-			if (client.crosshairTarget instanceof BlockHitResult hit) {
-				targetPos = hit.getBlockPos();
-			}
+			targetPos = getTargetBlockPos(client, tickDelta);
 			if (targetPos == null) {
 				return;
 			}
@@ -124,5 +125,17 @@ public class TesseractClient implements ClientModInitializer {
 			.normal(normalMatrix, 0.0f, 1.0f, 0.0f).next();
 		buffer.vertex(matrix, x2, y2, z2).color(OUTLINE_R, OUTLINE_G, OUTLINE_B, OUTLINE_A)
 			.normal(normalMatrix, 0.0f, 1.0f, 0.0f).next();
+	}
+
+	private BlockPos getTargetBlockPos(MinecraftClient client, float tickDelta) {
+		Entity cameraEntity = client.getCameraEntity();
+		if (cameraEntity == null) {
+			return null;
+		}
+		HitResult hit = cameraEntity.raycast(64.0, tickDelta, false);
+		if (hit.getType() == HitResult.Type.BLOCK && hit instanceof BlockHitResult blockHit) {
+			return blockHit.getBlockPos();
+		}
+		return null;
 	}
 }
