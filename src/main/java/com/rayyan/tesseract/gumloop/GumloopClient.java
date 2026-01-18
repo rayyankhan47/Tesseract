@@ -138,6 +138,22 @@ public final class GumloopClient {
 			});
 	}
 
+	public static PlanValidationResult parsePlanForSelection(String body, Selection buildSelection, String requestId) {
+		BlockPos size = effectiveBuildSize(buildSelection);
+		if (size == null) {
+			return PlanValidationResult.error("Invalid build selection size.");
+		}
+		JsonObject planJson = extractPlanJson(body);
+		if (planJson == null) {
+			return PlanValidationResult.error("Could not find build plan in response.");
+		}
+		PlanResult internal = parseAndValidatePlanJson(planJson, size, requestId);
+		if (internal.error != null) {
+			return PlanValidationResult.error(internal.error);
+		}
+		return PlanValidationResult.success(internal.plan);
+	}
+
 	private static PlanResult parseAndValidatePlan(String body, Selection buildSelection, String requestId) {
 		if (body == null || body.isBlank()) {
 			TesseractMod.LOGGER.warn("Gumloop {} -> empty response body.", requestId);
@@ -525,6 +541,24 @@ public final class GumloopClient {
 
 		private static PlanResult error(String error) {
 			return new PlanResult(null, error);
+		}
+	}
+
+	public static final class PlanValidationResult {
+		public final GumloopPayload.Response plan;
+		public final String error;
+
+		private PlanValidationResult(GumloopPayload.Response plan, String error) {
+			this.plan = plan;
+			this.error = error;
+		}
+
+		public static PlanValidationResult success(GumloopPayload.Response plan) {
+			return new PlanValidationResult(plan, null);
+		}
+
+		public static PlanValidationResult error(String error) {
+			return new PlanValidationResult(null, error);
 		}
 	}
 

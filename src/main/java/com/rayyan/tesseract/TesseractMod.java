@@ -22,6 +22,7 @@ import com.rayyan.tesseract.gumloop.GumloopProgressManager;
 import com.rayyan.tesseract.jobs.BuildJobManager;
 import com.rayyan.tesseract.jobs.BuildQueueManager;
 import com.rayyan.tesseract.network.SelectionNetworking;
+import com.rayyan.tesseract.paste.PlanPasteClient;
 import com.rayyan.tesseract.selection.Selection;
 import com.rayyan.tesseract.selection.SelectionManager;
 import io.netty.buffer.Unpooled;
@@ -62,7 +63,7 @@ public class TesseractMod implements ModInitializer {
 				})
 				.then(literal("help")
 					.executes(context -> {
-						sendMessage(context.getSource(), "Commands: /tesseract build <prompt>, /tesseract clear, /tesseract context clear");
+						sendMessage(context.getSource(), "Commands: /tesseract build <prompt>, /tesseract paste <url>, /tesseract clear, /tesseract context clear");
 						return 1;
 					})
 				)
@@ -92,6 +93,15 @@ public class TesseractMod implements ModInitializer {
 							ServerPlayerEntity player = context.getSource().getPlayer();
 							String prompt = StringArgumentType.getString(context, "prompt");
 							return startBuild(context.getSource(), player, prompt);
+						})
+					)
+				)
+				.then(literal("paste")
+					.then(argument("source", StringArgumentType.greedyString())
+						.executes(context -> {
+							ServerPlayerEntity player = context.getSource().getPlayer();
+							String source = StringArgumentType.getString(context, "source");
+							return startPaste(context.getSource(), player, source);
 						})
 					)
 				)
@@ -190,6 +200,35 @@ public class TesseractMod implements ModInitializer {
 			sendMessage(source, "Context attached (cyan selection).");
 		}
 		GumloopClient.sendBuildRequest(player, selection, contextSelection, prompt);
+		return 1;
+	}
+
+	private static int startPaste(ServerCommandSource source, ServerPlayerEntity player, String sourceUrl) {
+		if (player == null) {
+			sendMessage(source, "Error: player not found.");
+			return 0;
+		}
+		if (BuildJobManager.isInProgress(player.getUuid())) {
+			sendMessage(source, "Build already in progress. Please wait.");
+			return 0;
+		}
+		Selection selection = SelectionManager.getBuildSelection(player.getUuid());
+		if (selection == null || !selection.isComplete()) {
+			sendMessage(source, "Error: you haven't selected a region yet. Select two corners first.");
+			return 0;
+		}
+		BlockPos size = selection.getSize();
+		if (size == null) {
+			sendMessage(source, "Error: invalid selection.");
+			return 0;
+		}
+		if (size.getX() > MAX_REGION_SIZE || size.getY() > MAX_REGION_SIZE || size.getZ() > MAX_REGION_SIZE) {
+			sendMessage(source, "Error: selected region is too large (max 32x32x32).");
+			return 0;
+		}
+		BuildJobManager.start(player.getUuid());
+		sendMessage(source, "Tesseract paste: " + sourceUrl);
+		PlanPasteClient.fetchAndBuild(player, selection, sourceUrl);
 		return 1;
 	}
 

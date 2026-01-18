@@ -20,6 +20,18 @@ export PATH="$JAVA_HOME/bin:$PATH"
 **Then if necessary:** ./gradlew
 **Then run:** `./gradlew runClient`
 
+### Local plan server (for /tesseract paste)
+
+For the local-only paste workflow, start the plan registry server in another terminal:
+
+```bash
+python3 tools/plan_server.py
+```
+
+It exposes:
+- `POST http://localhost:4890/plans` → returns `{ "id": "ABC123", "url": "http://localhost:4890/plans/ABC123" }`
+- `GET  http://localhost:4890/plans/<id>` → returns the plan JSON `{ meta, ops }`
+
 ---
 
 ## 0. Elevator Pitch
@@ -277,6 +289,7 @@ We’ll also maintain 1–2 pre-tested prompts for reliability, e.g.:
 - Show chat feedback:
   - “Tesseract drafting…”
   - “Building… 35% (2800/8000)”
+- `/tesseract paste <url>` builds instantly (all ops placed immediately).
 
 ### 11.2 Cancellation
 De-scoped for MVP.

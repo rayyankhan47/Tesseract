@@ -45,3 +45,6 @@ versions/
 natives/
 logs/
 crash-reports/
+
+# Local plan registry
+plan_store/

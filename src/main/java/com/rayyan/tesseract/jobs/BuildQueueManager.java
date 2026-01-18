@@ -46,6 +46,36 @@ public final class BuildQueueManager {
 		return true;
 	}
 
+	public static boolean startInstantBuild(ServerPlayerEntity player, Selection selection, GumloopPayload.Response plan) {
+		if (player == null || selection == null || plan == null || plan.ops == null) {
+			return false;
+		}
+		BlockPos origin = selection.getMin();
+		if (origin == null) {
+			player.sendMessage(Text.of("Error: invalid build origin."), false);
+			return false;
+		}
+		ServerWorld world = (ServerWorld) player.getWorld();
+		int placed = 0;
+		for (int i = 0; i < plan.ops.size(); i++) {
+			GumloopPayload.BlockOp op = plan.ops.get(i);
+			BlockPos pos = origin.add(op.x, op.y, op.z);
+			if (!world.isChunkLoaded(pos)) {
+				player.sendMessage(Text.of("Error: build halted, chunk not loaded near " + pos.getX() + " " + pos.getY() + " " + pos.getZ()), false);
+				return false;
+			}
+			BlockState state = toBlockState(op.block);
+			if (state == null) {
+				player.sendMessage(Text.of("Error: unknown block id " + op.block), false);
+				return false;
+			}
+			world.setBlockState(pos, state, Block.NOTIFY_ALL);
+			placed++;
+		}
+		player.sendMessage(Text.of("Build complete: " + placed + " blocks."), false);
+		return true;
+	}
+
 	public static void tick(MinecraftServer server) {
 		for (Map.Entry<UUID, BuildJob> entry : ACTIVE_JOBS.entrySet()) {
 			BuildJob job = entry.getValue();
