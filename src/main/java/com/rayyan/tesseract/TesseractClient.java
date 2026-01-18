@@ -8,7 +8,6 @@ import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.fabricmc.fabric.api.client.rendering.v1.WorldRenderEvents;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.util.math.MatrixStack;
-import net.minecraft.client.render.GameRenderer;
 import net.minecraft.client.render.RenderLayer;
 import net.minecraft.client.render.VertexConsumer;
 import net.minecraft.client.render.VertexConsumerProvider;
@@ -16,7 +15,7 @@ import net.minecraft.util.hit.BlockHitResult;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Matrix4f;
 import net.minecraft.util.math.Vec3d;
-import net.minecraft.util.math.Vec3f;
+import net.minecraft.util.math.Matrix3f;
 
 public class TesseractClient implements ClientModInitializer {
 	private static final float OUTLINE_R = 1.0f;
@@ -103,18 +102,22 @@ public class TesseractClient implements ClientModInitializer {
 		matrices.push();
 		matrices.translate(-cameraPos.x, -cameraPos.y, -cameraPos.z);
 		Matrix4f matrix = matrices.peek().getPositionMatrix();
+		Matrix3f normalMatrix = matrices.peek().getNormalMatrix();
 
 		VertexConsumer buffer = consumers.getBuffer(RenderLayer.getLines());
-		drawLine(buffer, matrix, minX, maxY, minZ, maxX, maxY, minZ);
-		drawLine(buffer, matrix, maxX, maxY, minZ, maxX, maxY, maxZ);
-		drawLine(buffer, matrix, maxX, maxY, maxZ, minX, maxY, maxZ);
-		drawLine(buffer, matrix, minX, maxY, maxZ, minX, maxY, minZ);
+		drawLine(buffer, matrix, normalMatrix, minX, maxY, minZ, maxX, maxY, minZ);
+		drawLine(buffer, matrix, normalMatrix, maxX, maxY, minZ, maxX, maxY, maxZ);
+		drawLine(buffer, matrix, normalMatrix, maxX, maxY, maxZ, minX, maxY, maxZ);
+		drawLine(buffer, matrix, normalMatrix, minX, maxY, maxZ, minX, maxY, minZ);
 
 		matrices.pop();
 	}
 
-	private void drawLine(VertexConsumer buffer, Matrix4f matrix, float x1, float y1, float z1, float x2, float y2, float z2) {
-		buffer.vertex(matrix, x1, y1, z1).color(OUTLINE_R, OUTLINE_G, OUTLINE_B, OUTLINE_A).next();
-		buffer.vertex(matrix, x2, y2, z2).color(OUTLINE_R, OUTLINE_G, OUTLINE_B, OUTLINE_A).next();
+	private void drawLine(VertexConsumer buffer, Matrix4f matrix, Matrix3f normalMatrix,
+		float x1, float y1, float z1, float x2, float y2, float z2) {
+		buffer.vertex(matrix, x1, y1, z1).color(OUTLINE_R, OUTLINE_G, OUTLINE_B, OUTLINE_A)
+			.normal(normalMatrix, 0.0f, 1.0f, 0.0f).next();
+		buffer.vertex(matrix, x2, y2, z2).color(OUTLINE_R, OUTLINE_G, OUTLINE_B, OUTLINE_A)
+			.normal(normalMatrix, 0.0f, 1.0f, 0.0f).next();
 	}
 }
