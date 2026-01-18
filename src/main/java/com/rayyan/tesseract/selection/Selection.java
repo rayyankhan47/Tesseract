@@ -14,6 +14,10 @@ public class Selection {
 		this.cornerB = pos;
 	}
 
+	public void clearCornerB() {
+		this.cornerB = null;
+	}
+
 	public BlockPos getCornerA() {
 		return cornerA;
 	}

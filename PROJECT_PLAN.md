@@ -88,7 +88,7 @@ Rules for using this plan:
 #### 2.2.1 Choose wand UX
 - [x] Decide which item triggers build selection (e.g. wooden axe)
 - [x] Decide which item triggers context selection (a different item)
-- [x] Left-click sets Corner A, right-click sets Corner B (or consistent alternative)
+- [x] First click sets Corner 1, second click sets Corner 2 (either mouse button)
 
 #### 2.2.2 Hook interaction events
 - [x] On click, record block position as corner (depending on which wand)
@@ -100,8 +100,8 @@ Rules for using this plan:
 ### 2.3 Selection overlay rendering (filled ground tint)
 
 #### 2.3.1 Decide overlay style parameters
-- [x] Color (e.g. cyan/blue)
-- [x] Alpha (translucent)
+- [x] Color (e.g. red)
+- [x] Alpha (fully visible)
 - [ ] Render only within a max distance from player (optional perf guard)
 
 #### 2.3.2 Implement client-side rendering hook

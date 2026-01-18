@@ -84,11 +84,11 @@ public class TesseractMod implements ModInitializer {
 			}
 			Item held = player.getStackInHand(hand).getItem();
 			if (held == BUILD_WAND) {
-				setCorner(player.getUuid(), world, pos, true, true);
+				handleCornerClick(player.getUuid(), world, pos, true);
 				return ActionResult.SUCCESS;
 			}
 			if (held == CONTEXT_WAND) {
-				setCorner(player.getUuid(), world, pos, true, false);
+				handleCornerClick(player.getUuid(), world, pos, false);
 				return ActionResult.SUCCESS;
 			}
 			return ActionResult.PASS;
@@ -101,11 +101,11 @@ public class TesseractMod implements ModInitializer {
 			Item held = player.getStackInHand(hand).getItem();
 			BlockPos pos = hitResult.getBlockPos();
 			if (held == BUILD_WAND) {
-				setCorner(player.getUuid(), world, pos, false, true);
+				handleCornerClick(player.getUuid(), world, pos, true);
 				return ActionResult.SUCCESS;
 			}
 			if (held == CONTEXT_WAND) {
-				setCorner(player.getUuid(), world, pos, false, false);
+				handleCornerClick(player.getUuid(), world, pos, false);
 				return ActionResult.SUCCESS;
 			}
 			return ActionResult.PASS;
@@ -116,13 +116,15 @@ public class TesseractMod implements ModInitializer {
 		source.sendFeedback(Text.of(message), false);
 	}
 
-	private static void setCorner(UUID playerId, World world, BlockPos pos, boolean isCornerA, boolean isBuild) {
+	private static void handleCornerClick(UUID playerId, World world, BlockPos pos, boolean isBuild) {
 		Selection selection = isBuild
 			? SelectionManager.getBuildSelection(playerId)
 			: SelectionManager.getContextSelection(playerId);
 
+		boolean isCornerA = selection.getCornerA() == null || selection.getCornerB() != null;
 		if (isCornerA) {
 			selection.setCornerA(pos);
+			selection.clearCornerB();
 		} else {
 			selection.setCornerB(pos);
 		}
@@ -136,7 +138,7 @@ public class TesseractMod implements ModInitializer {
 	}
 
 	private static String formatCornerMessage(boolean isBuild, boolean isCornerA, BlockPos pos) {
-		String which = isCornerA ? "Corner A" : "Corner B";
+		String which = isCornerA ? "Corner 1" : "Corner 2";
 		String type = isBuild ? "Build" : "Context";
 		return type + " " + which + " set: " + pos.getX() + " " + pos.getY() + " " + pos.getZ();
 	}

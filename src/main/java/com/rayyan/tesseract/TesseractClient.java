@@ -1,6 +1,5 @@
 package com.rayyan.tesseract;
 
-import com.mojang.blaze3d.systems.RenderSystem;
 import com.rayyan.tesseract.network.SelectionNetworking;
 import com.rayyan.tesseract.selection.Selection;
 import com.rayyan.tesseract.selection.SelectionManager;
@@ -8,23 +7,23 @@ import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.fabricmc.fabric.api.client.rendering.v1.WorldRenderEvents;
 import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.render.BufferBuilder;
-import net.minecraft.client.render.GameRenderer;
-import net.minecraft.client.render.Tessellator;
-import net.minecraft.client.render.VertexFormat;
-import net.minecraft.client.render.VertexFormats;
 import net.minecraft.client.util.math.MatrixStack;
+import net.minecraft.client.render.GameRenderer;
+import net.minecraft.client.render.RenderLayer;
+import net.minecraft.client.render.VertexConsumer;
+import net.minecraft.client.render.VertexConsumerProvider;
+import net.minecraft.util.hit.BlockHitResult;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Matrix4f;
 import net.minecraft.util.math.Vec3d;
+import net.minecraft.util.math.Vec3f;
 
 public class TesseractClient implements ClientModInitializer {
-	private static final float OVERLAY_R = 0.2f;
-	private static final float OVERLAY_G = 0.7f;
-	private static final float OVERLAY_B = 1.0f;
-	private static final float OVERLAY_A = 0.25f;
-	private static final double OVERLAY_HEIGHT = 0.02;
-	private static final double OVERLAY_Y_OFFSET = 0.01;
+	private static final float OUTLINE_R = 1.0f;
+	private static final float OUTLINE_G = 0.1f;
+	private static final float OUTLINE_B = 0.1f;
+	private static final float OUTLINE_A = 1.0f;
+	private static final float OUTLINE_Y_OFFSET = 0.01f;
 
 	@Override
 	public void onInitializeClient() {
@@ -44,63 +43,78 @@ public class TesseractClient implements ClientModInitializer {
 				}
 			});
 		});
-		WorldRenderEvents.LAST.register(context -> renderSelectionOverlay(context.matrixStack(), context.camera().getPos()));
+		WorldRenderEvents.LAST.register(context -> renderSelectionOutline(context.matrixStack(), context.consumers(), context.camera().getPos()));
 	}
 
-	private void renderSelectionOverlay(MatrixStack matrices, Vec3d cameraPos) {
+	private void renderSelectionOutline(MatrixStack matrices, VertexConsumerProvider consumers, Vec3d cameraPos) {
 		MinecraftClient client = MinecraftClient.getInstance();
 		if (client.player == null) {
 			return;
 		}
 		Selection selection = SelectionManager.getBuildSelection(client.player.getUuid());
-		if (selection == null || !selection.isComplete()) {
+		if (selection == null || selection.getCornerA() == null) {
 			return;
 		}
 
-		BlockPos min = selection.getMin();
-		BlockPos max = selection.getMax();
-		if (min == null || max == null) {
-			return;
+		BlockPos cornerA = selection.getCornerA();
+		BlockPos cornerB = selection.getCornerB();
+		BlockPos targetPos = null;
+
+		if (cornerB == null && client.crosshairTarget instanceof BlockHitResult hit) {
+			targetPos = hit.getBlockPos();
 		}
-		BlockPos size = selection.getSize();
-		if (size != null && (long) size.getX() * (long) size.getZ() > 4096) {
+
+		BlockPos min;
+		BlockPos max;
+		if (cornerB != null) {
+			min = selection.getMin();
+			max = selection.getMax();
+		} else if (targetPos != null) {
+			min = new BlockPos(
+				Math.min(cornerA.getX(), targetPos.getX()),
+				Math.min(cornerA.getY(), targetPos.getY()),
+				Math.min(cornerA.getZ(), targetPos.getZ())
+			);
+			max = new BlockPos(
+				Math.max(cornerA.getX(), targetPos.getX()),
+				Math.max(cornerA.getY(), targetPos.getY()),
+				Math.max(cornerA.getZ(), targetPos.getZ())
+			);
+		} else {
 			return;
 		}
 
-		double minX = min.getX();
-		double minY = min.getY() + OVERLAY_Y_OFFSET;
-		double minZ = min.getZ();
-		double maxX = max.getX() + 1.0;
-		double maxY = minY + OVERLAY_HEIGHT;
-		double maxZ = max.getZ() + 1.0;
+		BlockPos size = new BlockPos(
+			max.getX() - min.getX() + 1,
+			max.getY() - min.getY() + 1,
+			max.getZ() - min.getZ() + 1
+		);
+		if ((long) size.getX() * (long) size.getZ() > 4096) {
+			return;
+		}
+
+		float minX = min.getX();
+		float minY = min.getY() + OUTLINE_Y_OFFSET;
+		float minZ = min.getZ();
+		float maxX = max.getX() + 1.0f;
+		float maxY = minY;
+		float maxZ = max.getZ() + 1.0f;
 
 		matrices.push();
 		matrices.translate(-cameraPos.x, -cameraPos.y, -cameraPos.z);
 		Matrix4f matrix = matrices.peek().getPositionMatrix();
 
-		RenderSystem.enableBlend();
-		RenderSystem.defaultBlendFunc();
-		RenderSystem.enableDepthTest();
-		RenderSystem.disableCull();
-		RenderSystem.depthMask(false);
-		RenderSystem.disableTexture();
-		RenderSystem.setShader(GameRenderer::getPositionColorShader);
+		VertexConsumer buffer = consumers.getBuffer(RenderLayer.getLines());
+		drawLine(buffer, matrix, minX, maxY, minZ, maxX, maxY, minZ);
+		drawLine(buffer, matrix, maxX, maxY, minZ, maxX, maxY, maxZ);
+		drawLine(buffer, matrix, maxX, maxY, maxZ, minX, maxY, maxZ);
+		drawLine(buffer, matrix, minX, maxY, maxZ, minX, maxY, minZ);
 
-		Tessellator tessellator = Tessellator.getInstance();
-		BufferBuilder buffer = tessellator.getBuffer();
-		buffer.begin(VertexFormat.DrawMode.QUADS, VertexFormats.POSITION_COLOR);
-
-		// Top face quad (filled ground tint)
-		buffer.vertex(matrix, (float) minX, (float) maxY, (float) minZ).color(OVERLAY_R, OVERLAY_G, OVERLAY_B, OVERLAY_A).next();
-		buffer.vertex(matrix, (float) maxX, (float) maxY, (float) minZ).color(OVERLAY_R, OVERLAY_G, OVERLAY_B, OVERLAY_A).next();
-		buffer.vertex(matrix, (float) maxX, (float) maxY, (float) maxZ).color(OVERLAY_R, OVERLAY_G, OVERLAY_B, OVERLAY_A).next();
-		buffer.vertex(matrix, (float) minX, (float) maxY, (float) maxZ).color(OVERLAY_R, OVERLAY_G, OVERLAY_B, OVERLAY_A).next();
-
-		tessellator.draw();
-		RenderSystem.enableTexture();
-		RenderSystem.depthMask(true);
-		RenderSystem.enableCull();
-		RenderSystem.disableBlend();
 		matrices.pop();
+	}
+
+	private void drawLine(VertexConsumer buffer, Matrix4f matrix, float x1, float y1, float z1, float x2, float y2, float z2) {
+		buffer.vertex(matrix, x1, y1, z1).color(OUTLINE_R, OUTLINE_G, OUTLINE_B, OUTLINE_A).next();
+		buffer.vertex(matrix, x2, y2, z2).color(OUTLINE_R, OUTLINE_G, OUTLINE_B, OUTLINE_A).next();
 	}
 }
