@@ -183,10 +183,10 @@ Takes the spec from the InterpretationAgent and decomposes it into an ordered li
 
 Create `src/main/java/com/rayyan/tesseract/agent/PlanningAgent.java`:
 
-- [ ] Method: `void run(BuildState state, GeminiClient gemini, Runnable onComplete, Consumer<String> onError)`
-- [ ] Calls `gemini.complete(systemPrompt, specJson + "\n\nBounding box: " + w + "×" + h + "×" + d)`
-- [ ] On success: parses JSON array into `List<ComponentPlan>`, computes a simple left-to-right spatial layout to assign `originX/Y/Z` to each component (basic stacking — the GenerationAgent will use these as starting hints), sets `state.componentPlan`, emits an event listing the component names in order, calls `onComplete`
-- [ ] On parse failure: calls `onError`
+- [x] Method: `void run(BuildState state, GeminiClient gemini, Runnable onComplete, Consumer<String> onError)`
+- [x] Calls `gemini.complete(systemPrompt, specJson + "\n\nBounding box: " + w + "×" + h + "×" + d)`
+- [x] On success: parses JSON array into `List<ComponentPlan>`, computes a simple left-to-right spatial layout to assign `originX/Y/Z` to each component (basic stacking — the GenerationAgent will use these as starting hints), sets `state.componentPlan`, emits an event listing the component names in order, calls `onComplete`
+- [x] On parse failure: calls `onError`
 
 ### 5.3 — Connect to Orchestrator
 
