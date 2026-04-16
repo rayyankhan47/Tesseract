@@ -243,9 +243,9 @@ Create `src/main/java/com/rayyan/tesseract/agent/CriticAgent.java`:
 
 ### 7.2 — Floating block detection
 
-- [ ] Check 4 (structural support): for any block where `op.y > 0`, verify there exists another block in the array at `(op.x, op.y - 1, op.z)` OR the op's y-coordinate sits on the ground level of the build (i.e., `state.placementOrigin.y + component.originY + op.y == worldGroundLevel`)
-- [ ] A block is exempt from this check if it is `minecraft:torch`, `minecraft:lantern`, or any `_slab`, `_stairs`, `_fence`, `_trapdoor` — these are decorative and may be intentionally attached to walls
-- [ ] Collect all floating violations; if count > 10% of total ops, return failure "too many floating blocks ({n}/{total})"
+- [x] Check 4 (structural support): for any block where `op.y > 0`, verify there exists another block in the array at `(op.x, op.y - 1, op.z)` OR the op's y-coordinate sits on the ground level of the build (i.e., `state.placementOrigin.y + component.originY + op.y == worldGroundLevel`)
+- [x] A block is exempt from this check if it is `minecraft:torch`, `minecraft:lantern`, or any `_slab`, `_stairs`, `_fence`, `_trapdoor` — these are decorative and may be intentionally attached to walls
+- [x] Collect all floating violations; if count > 10% of total ops, return failure "too many floating blocks ({n}/{total})"
 
 ### 7.3 — Max block count check
 

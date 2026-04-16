@@ -66,7 +66,68 @@ public final class CriticAgent {
             }
         }
 
-        LOGGER.debug("CriticAgent: component '{}' passed checks 1–3 ({} blocks).", component.name, ops.size());
+        // Check 4 — floating block detection (structural support)
+        CriticResult floatCheck = checkFloating(ops, component);
+        if (!floatCheck.passed()) return floatCheck;
+
+        LOGGER.debug("CriticAgent: component '{}' passed checks 1–4 ({} blocks).", component.name, ops.size());
         return CriticResult.pass();
+    }
+
+    // -------------------------------------------------------------------------
+    // Check 4 — floating block detection
+    // -------------------------------------------------------------------------
+
+    /**
+     * For any block where {@code op.y > 0}, there must exist another op in the
+     * array at {@code (op.x, op.y - 1, op.z)} OR the block is on the ground row
+     * of this component ({@code component.originY == 0 && op.y == 0} — already
+     * excluded by the y>0 guard). Decorative blocks exempt from this check are
+     * torches, lanterns, and any block whose ID ends in _slab, _stairs, _fence,
+     * or _trapdoor.
+     *
+     * If more than 10 % of non-exempt blocks are floating, the check fails.
+     */
+    private static CriticResult checkFloating(List<GumloopPayload.BlockOp> ops, ComponentPlan component) {
+        // Build a coordinate set for O(1) lookup.
+        java.util.Set<Long> occupied = new java.util.HashSet<>();
+        for (GumloopPayload.BlockOp op : ops) {
+            occupied.add(key(op.x, op.y, op.z));
+        }
+
+        int floating = 0;
+        int nonExempt = 0;
+        for (GumloopPayload.BlockOp op : ops) {
+            if (op.y == 0) continue; // resting on the component's base row — always supported
+            if (isExempt(op.block)) continue;
+            nonExempt++;
+            // Supported if there's a block directly below, OR the component's origin
+            // is at y=0 in the build and op.y==1 sits on the world ground (y-1 == ground).
+            boolean hasSupport = occupied.contains(key(op.x, op.y - 1, op.z));
+            if (!hasSupport) floating++;
+        }
+
+        if (nonExempt == 0) return CriticResult.pass();
+        double ratio = (double) floating / nonExempt;
+        if (ratio > 0.10) {
+            return CriticResult.fail(String.format(
+                    "too many floating blocks (%d/%d non-exempt blocks have no support below them). " +
+                    "Ensure structural blocks at y>0 have a block at y-1.",
+                    floating, nonExempt));
+        }
+        return CriticResult.pass();
+    }
+
+    private static boolean isExempt(String blockId) {
+        if (blockId == null) return false;
+        String id = blockId.toLowerCase();
+        return id.contains("torch") || id.contains("lantern")
+                || id.endsWith("_slab") || id.endsWith("_stairs")
+                || id.endsWith("_fence") || id.endsWith("_trapdoor");
+    }
+
+    /** Pack (x, y, z) into a single long for use as a hash-set key. */
+    private static long key(int x, int y, int z) {
+        return ((long)(x + 512) << 20) | ((long)(y + 512) << 10) | (z + 512);
     }
 }
