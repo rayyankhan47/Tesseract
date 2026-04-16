@@ -42,7 +42,7 @@ public final class CriticAgent {
             return CriticResult.fail("component generated zero blocks");
         }
 
-        // Check 2 — palette conformance
+        // Check 2 — palette conformance (strip block state properties before lookup)
         List<String> violations = new ArrayList<>();
         for (BlockOp op : ops) {
             if (op.block == null || op.block.isBlank()) {
@@ -50,6 +50,9 @@ public final class CriticAgent {
                 continue;
             }
             String id = op.block.contains(":") ? op.block : "minecraft:" + op.block;
+            // Strip "[facing=north,...]" bracket notation before palette check
+            int bracket = id.indexOf('[');
+            if (bracket != -1) id = id.substring(0, bracket);
             if (!palette.contains(id)) {
                 violations.add(op.block);
             }
@@ -58,11 +61,32 @@ public final class CriticAgent {
             return CriticResult.fail("blocks not in palette: " + violations.subList(0, Math.min(5, violations.size())));
         }
 
-        // Check 3 — floating block detection (structural support)
+        // Check 3 — bounds enforcement: remove out-of-bounds ops (non-fatal), fail only if all removed.
+        if (component.sizeX > 0 && component.sizeY > 0 && component.sizeZ > 0) {
+            int before = ops.size();
+            ops.removeIf(op -> op.x < 0 || op.x >= component.sizeX
+                             || op.y < 0 || op.y >= component.sizeY
+                             || op.z < 0 || op.z >= component.sizeZ);
+            int removed = before - ops.size();
+            if (removed > 0) {
+                LOGGER.warn("CriticAgent: component '{}' had {} out-of-bounds op(s) removed (of {}).",
+                        component.name, removed, before);
+            }
+            if (ops.isEmpty()) {
+                return CriticResult.fail(
+                        "all generated blocks were outside the component's bounds " +
+                        "(x: 0–" + (component.sizeX - 1) +
+                        ", y: 0–" + (component.sizeY - 1) +
+                        ", z: 0–" + (component.sizeZ - 1) + "). " +
+                        "Ensure all y coordinates are between 0 and " + (component.sizeY - 1) + ".");
+            }
+        }
+
+        // Check 4 — floating block detection (structural support)
         CriticResult floatCheck = checkFloating(ops, component);
         if (!floatCheck.passed()) return floatCheck;
 
-        // Check 4 — budget enforcement (non-fatal: truncate ops, log warning)
+        // Check 5 — budget enforcement (non-fatal: truncate ops, log warning)
         if (componentCount > 0 && totalMaxBlocks > 0) {
             int budget = Math.max(1, totalMaxBlocks / componentCount);
             if (ops.size() > budget) {

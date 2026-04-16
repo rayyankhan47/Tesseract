@@ -41,28 +41,35 @@ public final class PlanningAgent {
     static final String SYSTEM_PROMPT =
         "You are the Planning Agent for a Minecraft building assistant.\n" +
         "Your ONLY job is to decompose a building spec into the minimum set of named structural components.\n" +
-        "You know nothing about block coordinates — only spatial structure and build order.\n" +
+        "You know nothing about block coordinates — only spatial structure and vertical build order.\n" +
         "\n" +
         "Respond with ONLY a valid JSON array — no markdown fences, no prose, no explanation.\n" +
         "\n" +
         "Each element in the array must have this schema:\n" +
         "{\n" +
         "  \"id\": string,           // unique id like \"comp_1\", \"comp_2\", etc.\n" +
-        "  \"name\": string,         // short name: \"foundation\", \"left_wall\", \"roof\", etc.\n" +
+        "  \"name\": string,         // short name: \"foundation\", \"walls\", \"roof\", etc.\n" +
         "  \"description\": string,  // precise description a block-level generator can work from:\n" +
-        "                           //   include footprint dimensions, height, materials, and any\n" +
-        "                           //   architectural details (arches, crenellations, etc.)\n" +
-        "  \"build_after\": [string] // ids of components that must be built before this one\n" +
+        "                           //   include footprint dimensions, height in blocks, materials, and\n" +
+        "                           //   architectural details (arches, overhangs, crenellations, etc.)\n" +
+        "  \"build_after\": [string],// ids of components that must be built before this one\n" +
+        "  \"y_min\": integer,       // lowest y row this component occupies (0 = ground level of the build)\n" +
+        "  \"y_max\": integer        // highest y row this component occupies (inclusive, 0-based)\n" +
         "}\n" +
         "\n" +
         "Rules:\n" +
         "- Decompose into the MINIMUM number of components needed. Typical builds have 3–8 components.\n" +
-        "- Order them so dependencies are always built before dependents (build_after lists only earlier ids).\n" +
+        "- Order them bottom-to-top: foundation first, roof last. Dependencies always come before dependents.\n" +
         "- The first component should always have build_after: [] (it's the foundation or base).\n" +
-        "- Write descriptions that are precise enough for a block-level generator: include exact dimensions,\n" +
-        "  materials from the provided list, and structural details.\n" +
+        "- CRITICAL — vertical layout: y=0 is the bottom row of the build. The total build height is\n" +
+        "  given in context. Assign non-overlapping y_min/y_max ranges to every component.\n" +
+        "  Example for a 10-block-tall cabin: foundation y_min=0 y_max=0, walls y_min=1 y_max=7,\n" +
+        "  roof y_min=8 y_max=9. The Generation Agent will be told 'your y coordinates must be 0 to\n" +
+        "  (y_max - y_min)' — so y=0 inside a component always maps to y_min in the full build.\n" +
+        "  Components MUST NOT have overlapping y ranges.\n" +
+        "- Write descriptions that are precise: include exact footprint dimensions, height in blocks,\n" +
+        "  materials, and structural details.\n" +
         "- The total block count across ALL components must not exceed the maxBlocks limit given in context.\n" +
-        "- Every component must fit within the bounding box dimensions given in context.\n" +
         "- Use materials ONLY from the provided materials list.\n" +
         "IMPORTANT: Respond with ONLY the JSON array. No other text whatsoever.";
 
@@ -129,8 +136,11 @@ public final class PlanningAgent {
     static String buildUserPrompt(BuildSpec spec, int width, int height, int depth, int maxBlocks) {
         String specJson = GSON.toJson(spec);
         return "Building spec:\n" + specJson + "\n\n" +
-               "Bounding box: " + width + "×" + height + "×" + depth + " blocks\n" +
+               "Bounding box: " + width + "×" + height + "×" + depth + " blocks (width × height × depth)\n" +
+               "Total build height: " + height + " blocks (y=0 is ground, y=" + (height - 1) + " is the top)\n" +
                "Max total blocks across all components: " + maxBlocks + "\n\n" +
+               "Assign non-overlapping y_min/y_max ranges to each component so they stack correctly.\n" +
+               "The tallest component's y_max must be exactly " + (height - 1) + ".\n\n" +
                "Decompose this into an ordered list of named components. Return only the JSON array.";
     }
 
@@ -174,6 +184,16 @@ public final class PlanningAgent {
                 }
             }
 
+            // Read explicit vertical bounds — used by assignSpatialLayout.
+            // Defaults (sizeY=0) signal that the full-height fallback should apply.
+            if (obj.has("y_min") && !obj.get("y_min").isJsonNull()) {
+                cp.originY = Math.max(0, obj.get("y_min").getAsInt());
+            }
+            if (obj.has("y_max") && !obj.get("y_max").isJsonNull()) {
+                int yMax = obj.get("y_max").getAsInt();
+                cp.sizeY = Math.max(1, yMax - cp.originY + 1);
+            }
+
             cp.retryCount = 0;
             components.add(cp);
         }
@@ -193,23 +213,30 @@ public final class PlanningAgent {
     // -------------------------------------------------------------------------
 
     /**
-     * Simple layout: each component gets the full bounding box as its available
-     * space. The GenerationAgent generates coordinates relative to the component
-     * origin, so all components share origin (0,0,0) by default — they overlay
-     * within the same bounding box, which is correct for architectural components
-     * that are spatially part of the same structure (foundation, walls, roof, etc.).
+     * Assigns spatial layout to each component.
      *
-     * Components that the LLM describes as occupying a sub-region will naturally
-     * produce coordinates only within that sub-region.
+     * X/Z: every component gets the full horizontal footprint (origin 0, size = totalW/totalD).
+     * Y: taken from the y_min/y_max fields the LLM returned (stored in cp.originY / cp.sizeY
+     *    during parse). Falls back to the full height if the LLM omitted those fields.
+     * All values are clamped to stay within [0, totalH).
      */
     static void assignSpatialLayout(List<ComponentPlan> components, int totalW, int totalH, int totalD) {
         for (ComponentPlan cp : components) {
+            // Horizontal footprint — always the full bounding box.
             cp.originX = 0;
-            cp.originY = 0;
             cp.originZ = 0;
             cp.sizeX = totalW;
-            cp.sizeY = totalH;
             cp.sizeZ = totalD;
+
+            // Vertical layout — use LLM-supplied y_min/y_max if present (sizeY > 0),
+            // otherwise fall back to the full height range.
+            if (cp.sizeY <= 0) {
+                cp.originY = 0;
+                cp.sizeY = totalH;
+            }
+            // Clamp to valid range so a bad LLM response can't cause world-corrupting offsets.
+            cp.originY = Math.max(0, Math.min(cp.originY, totalH - 1));
+            cp.sizeY   = Math.max(1, Math.min(cp.sizeY,   totalH - cp.originY));
         }
     }
 

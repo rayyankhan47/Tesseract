@@ -47,12 +47,21 @@ public final class GenerationAgent {
         "Each element in the array must have exactly this schema:\n" +
         "{ \"x\": integer, \"y\": integer, \"z\": integer, \"block\": string }\n" +
         "\n" +
+        "Block state properties:\n" +
+        "- You MAY append block state properties in bracket notation to orient blocks correctly:\n" +
+        "    \"minecraft:oak_stairs[facing=north,half=bottom]\"\n" +
+        "    \"minecraft:oak_log[axis=y]\"\n" +
+        "    \"minecraft:oak_trapdoor[facing=north,half=bottom,open=false]\"\n" +
+        "- Use facing=north/south/east/west for stairs, doors, trapdoors, and other directional blocks.\n" +
+        "- Use axis=x/y/z for logs and pillars.\n" +
+        "- Always use architecturally correct orientations (stairs face inward, ridge logs run lengthwise, etc.).\n" +
+        "\n" +
         "Rules:\n" +
         "- Coordinates are relative to THIS component's origin — start from (0, 0, 0).\n" +
         "- Use ONLY block IDs from the provided materials list (full 'minecraft:' form).\n" +
-        "- Every block must be at a valid coordinate within the component's bounding box.\n" +
-        "- Build structurally — walls need foundations, roofs need walls, etc.\n" +
-        "- Do NOT place blocks outside the component's bounding box dimensions.\n" +
+        "- CRITICAL: Your y coordinates MUST be between 0 and the max_y given in context (inclusive).\n" +
+        "  Blocks placed outside this range will be discarded — they will NOT appear in the build.\n" +
+        "- Build structurally — ensure every non-ground block has support below it.\n" +
         "- Do NOT use 'minecraft:air' for intentional gaps — just omit those positions.\n" +
         "- Stay within the max block budget given in context.\n" +
         "IMPORTANT: Respond with ONLY the JSON array. No other text whatsoever.";
@@ -64,10 +73,15 @@ public final class GenerationAgent {
         sb.append("Component to generate:\n");
         sb.append("  Name: ").append(component.name).append("\n");
         sb.append("  Description: ").append(component.description).append("\n");
-        sb.append("  Bounding box: ").append(component.sizeX).append("×")
-          .append(component.sizeY).append("×").append(component.sizeZ).append(" blocks\n");
-        sb.append("  Origin within build: (").append(component.originX).append(", ")
-          .append(component.originY).append(", ").append(component.originZ).append(")\n");
+        sb.append("  Footprint: ").append(component.sizeX).append("×").append(component.sizeZ)
+          .append(" blocks (x: 0–").append(component.sizeX - 1)
+          .append(", z: 0–").append(component.sizeZ - 1).append(")\n");
+        sb.append("  Height: ").append(component.sizeY).append(" blocks\n");
+        sb.append("  CRITICAL — y range: 0 to ").append(component.sizeY - 1)
+          .append(" (y=0 maps to world y=").append(component.originY)
+          .append(", y=").append(component.sizeY - 1)
+          .append(" maps to world y=").append(component.originY + component.sizeY - 1)
+          .append("). Blocks outside 0–").append(component.sizeY - 1).append(" are discarded.\n");
 
         sb.append("\nAvailable block IDs (use ONLY these):\n");
         List<String> palette = buildFullPaletteFromSpec(spec);
@@ -75,7 +89,10 @@ public final class GenerationAgent {
             sb.append("  ").append(id).append("\n");
         }
 
-        sb.append("\nMax blocks for this component: ").append(component.sizeX * component.sizeY * component.sizeZ);
+        int maxBudget = component.sizeX * component.sizeY * component.sizeZ;
+        sb.append("\nMax blocks for this component: ").append(maxBudget)
+          .append(" (").append(component.sizeX).append("×").append(component.sizeY)
+          .append("×").append(component.sizeZ).append(" volume — don't fill it solid, leave room for architecture)");
 
         if (allComponents != null && allComponents.size() > 1) {
             sb.append("\n\nOther components in this build (for spatial context — do not place blocks meant for them):\n");

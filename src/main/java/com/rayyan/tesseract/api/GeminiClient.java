@@ -39,7 +39,7 @@ public final class GeminiClient {
      * non-5xx errors (4xx, parse failures) fail immediately without fallback.
      */
     private static final List<String> MODELS = List.of(
-        "gemini-2.0-flash-lite-preview",
+        "gemini-3.1-flash-lite-preview",
         "gemini-2.5-flash",
         "gemini-2.5-flash-lite"
     );
@@ -144,7 +144,7 @@ public final class GeminiClient {
         String url = String.format(BASE_URL, model) + "?key=" + apiKey;
         HttpRequest request = HttpRequest.newBuilder()
             .uri(URI.create(url))
-            .timeout(Duration.ofSeconds(30))
+            .timeout(Duration.ofSeconds(60))
             .header("Content-Type", "application/json")
             .POST(HttpRequest.BodyPublishers.ofString(GSON.toJson(body)))
             .build();

@@ -5,6 +5,7 @@ import net.minecraft.block.Block;
 import net.minecraft.block.BlockState;
 import net.minecraft.block.Blocks;
 import net.minecraft.server.world.ServerWorld;
+import net.minecraft.state.property.Property;
 import net.minecraft.util.Identifier;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.registry.Registry;
@@ -12,7 +13,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.function.Consumer;
 
 /**
@@ -105,13 +109,51 @@ public final class PlacementAgent {
     // Helpers — copied exactly from BuildQueueManager
     // -------------------------------------------------------------------------
 
-    /** Resolves a block ID string to a BlockState. Returns null for unknown or air. */
+    /**
+     * Resolves a block ID string to a BlockState.
+     *
+     * Supports optional block state properties in Minecraft bracket notation:
+     *   "minecraft:oak_stairs[facing=north,half=bottom]"
+     *   "minecraft:oak_log[axis=y]"
+     *
+     * Unknown property keys or values are silently ignored (the default state value is kept).
+     * Returns null for an unknown block ID or air.
+     */
     public static BlockState toBlockState(String blockId) {
         if (blockId == null || blockId.isBlank()) return null;
-        Identifier identifier = Identifier.tryParse(blockId);
+
+        // Split base ID from optional "[key=value,...]" properties.
+        String baseId = blockId;
+        Map<String, String> props = new LinkedHashMap<>();
+        int bracketStart = blockId.indexOf('[');
+        if (bracketStart != -1 && blockId.endsWith("]")) {
+            baseId = blockId.substring(0, bracketStart);
+            String propsStr = blockId.substring(bracketStart + 1, blockId.length() - 1);
+            for (String pair : propsStr.split(",")) {
+                String[] kv = pair.split("=", 2);
+                if (kv.length == 2) props.put(kv[0].trim(), kv[1].trim());
+            }
+        }
+
+        Identifier identifier = Identifier.tryParse(baseId);
         if (identifier == null) return null;
         Block block = Registry.BLOCK.get(identifier);
         if (block == Blocks.AIR) return null;
-        return block.getDefaultState();
+
+        BlockState state = block.getDefaultState();
+        for (Map.Entry<String, String> entry : props.entrySet()) {
+            state = applyProperty(state, entry.getKey(), entry.getValue());
+        }
+        return state;
+    }
+
+    /** Applies a single named property to a BlockState; ignores unknown keys/values. */
+    @SuppressWarnings("unchecked")
+    private static <T extends Comparable<T>> BlockState applyProperty(
+            BlockState state, String key, String value) {
+        Property<?> prop = state.getBlock().getStateManager().getProperty(key);
+        if (prop == null) return state;
+        Optional<T> parsed = (Optional<T>) prop.parse(value);
+        return parsed.map(v -> state.with((Property<T>) prop, v)).orElse(state);
     }
 }
