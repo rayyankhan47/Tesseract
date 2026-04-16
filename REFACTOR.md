@@ -32,7 +32,7 @@ The input and output of the system are unchanged: player types a prompt, blocks 
 - [x] **Step 3** — Build the Orchestrator and state machine
 - [x] **Step 4** — Build InterpretationAgent
 - [x] **Step 5** — Build PlanningAgent
-- [ ] **Step 6** — Build GenerationAgent
+- [x] **Step 6** — Build GenerationAgent
 - [ ] **Step 7** — Build CriticAgent
 - [ ] **Step 8** — Extract PlacementAgent
 - [ ] **Step 9** — Wire everything end-to-end and test
@@ -221,10 +221,10 @@ Iterates through the component list one at a time. For each component, makes one
 
 Create `src/main/java/com/rayyan/tesseract/agent/GenerationAgent.java`:
 
-- [ ] Method: `void runComponent(BuildState state, GeminiClient gemini, int retryAttempt, String priorFailureReason, Runnable onCriticPass, BiConsumer<String, Boolean> onCriticFail)` — `onCriticFail` receives the failure reason and a boolean `shouldRetry`
-- [ ] Builds prompt from `state.componentPlan.get(state.currentComponentIndex)` and `state.spec.materials`
-- [ ] Parses the response into `List<BlockOp>`; on JSON parse failure, calls `onCriticFail("Malformed JSON from LLM", retryAttempt < 3)`
-- [ ] On success: calls into `CriticAgent.validate(...)`, then calls `onCriticPass` or `onCriticFail` accordingly
+- [x] Method: `void runComponent(BuildState state, GeminiClient gemini, int retryAttempt, String priorFailureReason, Runnable onCriticPass, BiConsumer<String, Boolean> onCriticFail)` — `onCriticFail` receives the failure reason and a boolean `shouldRetry`
+- [x] Builds prompt from `state.componentPlan.get(state.currentComponentIndex)` and `state.spec.materials`
+- [x] Parses the response into `List<BlockOp>`; on JSON parse failure, calls `onCriticFail("Malformed JSON from LLM", retryAttempt < 3)`
+- [x] On success: calls into `CriticAgent.validate(...)`, then calls `onCriticPass` or `onCriticFail` accordingly
 
 ---
 

@@ -142,11 +142,54 @@ public final class GenerationAgent {
             return;
         }
 
-        // TODO(Step 6.3): replace stub with actual Gemini call and JSON parsing.
-        // The stub returns an empty list, which CriticAgent will reject, triggering
-        // the retry path. This keeps the compile/test cycle intact until 6.3.
-        List<GumloopPayload.BlockOp> ops = List.of();
-        handleCriticResult(state, gemini, component, ops, retryAttempt, onCriticPass, onCriticFail);
+        String userPrompt = buildUserPrompt(component, state.spec, state.componentPlan, priorFailureReason);
+
+        LOGGER.info("GenerationAgent: calling Gemini for component '{}' (attempt {}/{}).",
+                component.name, retryAttempt + 1, MAX_RETRIES);
+
+        gemini.complete(SYSTEM_PROMPT, userPrompt).whenComplete((responseText, ex) -> {
+            if (ex != null) {
+                LOGGER.error("GenerationAgent: Gemini call failed for '{}'", component.name, ex);
+                onCriticFail.accept("Gemini call failed: " + ex.getMessage(), retryAttempt + 1 < MAX_RETRIES);
+                return;
+            }
+            List<GumloopPayload.BlockOp> ops;
+            try {
+                ops = parseOps(responseText);
+            } catch (Exception e) {
+                LOGGER.error("GenerationAgent: JSON parse failed for '{}': {}", component.name, responseText, e);
+                onCriticFail.accept("Malformed JSON from LLM: " + e.getMessage(), retryAttempt + 1 < MAX_RETRIES);
+                return;
+            }
+            handleCriticResult(state, gemini, component, ops, retryAttempt, onCriticPass, onCriticFail);
+        });
+    }
+
+    // -------------------------------------------------------------------------
+    // JSON parsing
+    // -------------------------------------------------------------------------
+
+    static List<GumloopPayload.BlockOp> parseOps(String responseText) {
+        String json = responseText.trim();
+        if (json.startsWith("```")) {
+            json = json.replaceAll("(?s)^```[a-zA-Z]*\\n?", "").replaceAll("```\\s*$", "").trim();
+        }
+        com.google.gson.JsonElement root = com.google.gson.JsonParser.parseString(json);
+        if (!root.isJsonArray()) {
+            throw new RuntimeException("Expected JSON array, got: " + root.getClass().getSimpleName());
+        }
+        com.google.gson.JsonArray arr = root.getAsJsonArray();
+        List<GumloopPayload.BlockOp> ops = new java.util.ArrayList<>();
+        for (com.google.gson.JsonElement el : arr) {
+            com.google.gson.JsonObject obj = el.getAsJsonObject();
+            GumloopPayload.BlockOp op = new GumloopPayload.BlockOp();
+            op.x = obj.get("x").getAsInt();
+            op.y = obj.get("y").getAsInt();
+            op.z = obj.get("z").getAsInt();
+            op.block = obj.get("block").getAsString();
+            ops.add(op);
+        }
+        return ops;
     }
 
     // -------------------------------------------------------------------------

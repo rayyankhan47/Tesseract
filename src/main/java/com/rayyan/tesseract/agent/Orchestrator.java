@@ -120,19 +120,31 @@ public final class Orchestrator {
                         + (state.componentPlan != null ? "/" + state.componentPlan.size() : "")
                         + (comp != null ? ": " + comp.name : ""));
                 AgentProgressManager.updateLabel(state.playerId, label);
-                // TODO(Step 6): replace stub with GenerationAgent.runComponent(state, getGemini(), 0, null,
-                //     () -> state.player.getServer().execute(() -> transition(state, OrchestratorState.CRITIQUING)),
-                //     (reason, shouldRetry) -> state.player.getServer().execute(() -> {
-                //         if (shouldRetry) transition(state, OrchestratorState.GENERATING);
-                //         else             transition(state, OrchestratorState.PLACING);
-                //     }));
-                failBuild(state, "GenerationAgent not yet implemented (Step 6).");
+                int retryAttempt = comp != null ? comp.retryCount : 0;
+                String priorReason = comp != null ? comp.lastFailureReason : null;
+                GenerationAgent.runComponent(state, getGemini(), retryAttempt, priorReason,
+                    () -> state.player.getServer().execute(() ->
+                            transition(state, OrchestratorState.CRITIQUING)),
+                    (reason, shouldRetry) -> state.player.getServer().execute(() -> {
+                        emit(state, "Critic", "Component failed: " + reason);
+                        if (shouldRetry) {
+                            transition(state, OrchestratorState.GENERATING);
+                        } else {
+                            // Max retries reached — component already added to failedComponentIds.
+                            // Advance to the next component (or COMPLETE if all done).
+                            advanceOrComplete(state);
+                        }
+                    }));
             }
             case CRITIQUING -> {
-                // Handled inline by GenerationAgent + CriticAgent (Steps 6/7).
-                // The Orchestrator transitions here only as a logical marker; agents
-                // immediately call back with PLACING or GENERATING (retry).
-                emit(state, "Critic", "Validating component…");
+                // CriticAgent validation has already passed inside GenerationAgent before
+                // onCriticPass was called. This state is a logical marker — transition
+                // immediately to PLACING.
+                ComponentPlan approved = currentComponent(state);
+                emit(state, "Critic", "Component '" + (approved != null ? approved.name : "?") + "' passed"
+                        + (approved != null && approved.pendingOps != null
+                                ? " (" + approved.pendingOps.size() + " blocks)" : "") + ".");
+                transition(state, OrchestratorState.PLACING);
             }
             case PLACING -> {
                 emit(state, "Orchestrator", "→ PLACING");
