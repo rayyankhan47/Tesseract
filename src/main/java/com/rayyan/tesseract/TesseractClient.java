@@ -71,59 +71,64 @@ public class TesseractClient implements ClientModInitializer {
 
 		BlockPos cornerA = selection.getCornerA();
 		BlockPos cornerB = selection.getCornerB();
-		BlockPos targetPos = null;
 
-		if (cornerB == null) {
-			targetPos = getTargetBlockPos(MinecraftClient.getInstance(), tickDelta);
-			if (targetPos == null) {
-				return;
-			}
+		matrices.push();
+		matrices.translate(-cameraPos.x, -cameraPos.y, -cameraPos.z);
+		Matrix4f matrix = matrices.peek().getPositionMatrix();
+		Matrix3f normalMatrix = matrices.peek().getNormalMatrix();
+		VertexConsumer buffer = consumers.getBuffer(RenderLayer.getLines());
+
+		// Anchor mode: cornerA == cornerB (build wand single punch).
+		// Render a tall beacon-style indicator: 4 vertical lines + floor square.
+		if (cornerB != null && cornerA.equals(cornerB)) {
+			float ax = cornerA.getX();
+			float ay = cornerA.getY() + OUTLINE_Y_OFFSET;
+			float az = cornerA.getZ();
+			float top = ay + 20.0f;
+			// Four vertical pillars at the block corners
+			drawLine(buffer, matrix, normalMatrix, colorR, colorG, colorB, ax,       ay, az,       ax,       top, az);
+			drawLine(buffer, matrix, normalMatrix, colorR, colorG, colorB, ax + 1,   ay, az,       ax + 1,   top, az);
+			drawLine(buffer, matrix, normalMatrix, colorR, colorG, colorB, ax,       ay, az + 1,   ax,       top, az + 1);
+			drawLine(buffer, matrix, normalMatrix, colorR, colorG, colorB, ax + 1,   ay, az + 1,   ax + 1,   top, az + 1);
+			// Floor square
+			drawLine(buffer, matrix, normalMatrix, colorR, colorG, colorB, ax,     ay, az,     ax + 1, ay, az);
+			drawLine(buffer, matrix, normalMatrix, colorR, colorG, colorB, ax + 1, ay, az,     ax + 1, ay, az + 1);
+			drawLine(buffer, matrix, normalMatrix, colorR, colorG, colorB, ax + 1, ay, az + 1, ax,     ay, az + 1);
+			drawLine(buffer, matrix, normalMatrix, colorR, colorG, colorB, ax,     ay, az + 1, ax,     ay, az);
+			matrices.pop();
+			return;
 		}
 
+		// Normal two-corner box (used by context wand / web builds after synthesis).
 		BlockPos min;
 		BlockPos max;
 		if (cornerB != null) {
 			min = selection.getMin();
 			max = selection.getMax();
 		} else {
-			min = new BlockPos(
-				Math.min(cornerA.getX(), targetPos.getX()),
-				Math.min(cornerA.getY(), targetPos.getY()),
-				Math.min(cornerA.getZ(), targetPos.getZ())
-			);
-			max = new BlockPos(
-				Math.max(cornerA.getX(), targetPos.getX()),
-				Math.max(cornerA.getY(), targetPos.getY()),
-				Math.max(cornerA.getZ(), targetPos.getZ())
-			);
+			// cornerB not yet set — live preview follows player's crosshair
+			BlockPos targetPos = getTargetBlockPos(MinecraftClient.getInstance(), tickDelta);
+			if (targetPos == null) { matrices.pop(); return; }
+			min = new BlockPos(Math.min(cornerA.getX(), targetPos.getX()),
+				Math.min(cornerA.getY(), targetPos.getY()), Math.min(cornerA.getZ(), targetPos.getZ()));
+			max = new BlockPos(Math.max(cornerA.getX(), targetPos.getX()),
+				Math.max(cornerA.getY(), targetPos.getY()), Math.max(cornerA.getZ(), targetPos.getZ()));
 		}
 
-		BlockPos size = new BlockPos(
-			max.getX() - min.getX() + 1,
-			max.getY() - min.getY() + 1,
-			max.getZ() - min.getZ() + 1
-		);
-		if ((long) size.getX() * (long) size.getZ() > 4096) {
-			return;
-		}
+		int sizeX = max.getX() - min.getX() + 1;
+		int sizeZ = max.getZ() - min.getZ() + 1;
+		if ((long) sizeX * sizeZ > 4096) { matrices.pop(); return; }
 
 		float minX = min.getX();
 		float minY = min.getY() + OUTLINE_Y_OFFSET;
 		float minZ = min.getZ();
 		float maxX = max.getX() + 1.0f;
-		float maxY = minY;
 		float maxZ = max.getZ() + 1.0f;
 
-		matrices.push();
-		matrices.translate(-cameraPos.x, -cameraPos.y, -cameraPos.z);
-		Matrix4f matrix = matrices.peek().getPositionMatrix();
-		Matrix3f normalMatrix = matrices.peek().getNormalMatrix();
-
-		VertexConsumer buffer = consumers.getBuffer(RenderLayer.getLines());
-		drawLine(buffer, matrix, normalMatrix, colorR, colorG, colorB, minX, maxY, minZ, maxX, maxY, minZ);
-		drawLine(buffer, matrix, normalMatrix, colorR, colorG, colorB, maxX, maxY, minZ, maxX, maxY, maxZ);
-		drawLine(buffer, matrix, normalMatrix, colorR, colorG, colorB, maxX, maxY, maxZ, minX, maxY, maxZ);
-		drawLine(buffer, matrix, normalMatrix, colorR, colorG, colorB, minX, maxY, maxZ, minX, maxY, minZ);
+		drawLine(buffer, matrix, normalMatrix, colorR, colorG, colorB, minX, minY, minZ, maxX, minY, minZ);
+		drawLine(buffer, matrix, normalMatrix, colorR, colorG, colorB, maxX, minY, minZ, maxX, minY, maxZ);
+		drawLine(buffer, matrix, normalMatrix, colorR, colorG, colorB, maxX, minY, maxZ, minX, minY, maxZ);
+		drawLine(buffer, matrix, normalMatrix, colorR, colorG, colorB, minX, minY, maxZ, minX, minY, minZ);
 
 		matrices.pop();
 	}

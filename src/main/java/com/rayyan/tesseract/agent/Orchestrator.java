@@ -6,6 +6,7 @@ import com.rayyan.tesseract.gumloop.GumloopPayload;
 import com.rayyan.tesseract.jobs.BuildJobManager;
 import com.rayyan.tesseract.selection.Selection;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.util.math.BlockPos;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.text.Text;
 import net.minecraft.util.math.BlockPos;
@@ -139,6 +140,7 @@ public final class Orchestrator {
                                 + state.spec.width + "×" + state.spec.height + "×" + state.spec.depth
                                 + (state.spec.features != null && !state.spec.features.isEmpty()
                                         ? ", features: " + String.join(", ", state.spec.features) : ""));
+                        synthesizeSelectionFromSpec(state);
                         transition(state, OrchestratorState.PLANNING);
                     }),
                     err -> onServerThread(state, () -> failBuild(state, err)));
@@ -323,6 +325,39 @@ public final class Orchestrator {
         } else {
             action.run(); // last-resort fallback — should not occur in normal usage
         }
+    }
+
+    /**
+     * Replaces the 1×1×1 anchor selection with a real bounding box derived from
+     * the BuildSpec dimensions, centered horizontally on the anchor point.
+     * Y starts at the anchor block (builds upward).
+     *
+     * Called on the server thread immediately after InterpretationAgent completes.
+     * No-op for web builds, which have their own synthetic selection.
+     */
+    private static void synthesizeSelectionFromSpec(BuildState state) {
+        if (state.isWebBuild || state.buildSelection == null) return;
+        BlockPos anchor = state.buildSelection.getMin(); // was cornerA == cornerB
+        if (anchor == null) return;
+
+        int w = Math.max(4, state.spec.width);
+        int h = Math.max(4, state.spec.height);
+        int d = Math.max(4, state.spec.depth);
+
+        // Centre the footprint horizontally on the anchor; build upward from anchor.y
+        int halfW = w / 2;
+        int halfD = d / 2;
+        BlockPos newMin = new BlockPos(anchor.getX() - halfW, anchor.getY(), anchor.getZ() - halfD);
+        BlockPos newMax = new BlockPos(anchor.getX() + (w - 1 - halfW), anchor.getY() + h - 1, anchor.getZ() + (d - 1 - halfD));
+
+        Selection synth = new Selection();
+        synth.setCornerA(newMin);
+        synth.setCornerB(newMax);
+        state.buildSelection = synth;
+        state.placementOrigin = newMin;
+
+        LOGGER.info("Synthesised selection {}×{}×{} at origin ({},{},{})",
+                w, h, d, newMin.getX(), newMin.getY(), newMin.getZ());
     }
 
     private GeminiClient getGemini() {

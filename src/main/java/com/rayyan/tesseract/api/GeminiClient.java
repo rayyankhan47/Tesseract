@@ -1,12 +1,5 @@
 package com.rayyan.tesseract.api;
 
-import com.google.gson.Gson;
-import com.google.gson.JsonArray;
-import com.google.gson.JsonElement;
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
-import com.google.gson.JsonSyntaxException;
-
 import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -17,6 +10,13 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.util.Base64;
 import java.util.concurrent.CompletableFuture;
+
+import com.google.gson.Gson;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+import com.google.gson.JsonSyntaxException;
 
 /**
  * Minimal client for the Gemini generateContent REST API.
@@ -29,7 +29,7 @@ import java.util.concurrent.CompletableFuture;
  */
 public final class GeminiClient {
     private static final String API_URL =
-        "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent";
+        "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent";
     private static final Gson GSON = new Gson();
     private static final HttpClient HTTP = HttpClient.newHttpClient();
 
@@ -71,8 +71,16 @@ public final class GeminiClient {
      * Returns null if the file doesn't exist or the key isn't present.
      */
     private static String readDotEnv(String varName) {
-        Path dotEnv = Path.of(".env");
-        if (!Files.exists(dotEnv)) return null;
+        // Minecraft's CWD is run/ — walk up to find .env in the project root too.
+        Path dotEnv = null;
+        Path candidate = Path.of(".env").toAbsolutePath();
+        for (int i = 0; i < 4; i++) {
+            if (Files.exists(candidate)) { dotEnv = candidate; break; }
+            Path parent = candidate.getParent().getParent();
+            if (parent == null) break;
+            candidate = parent.resolve(".env");
+        }
+        if (dotEnv == null) return null;
         try {
             for (String line : Files.readAllLines(dotEnv)) {
                 line = line.strip();

@@ -7,8 +7,10 @@ import net.fabricmc.fabric.api.event.player.UseBlockCallback;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.network.PacketByteBuf;
+import net.minecraft.particle.ParticleTypes;
 import net.minecraft.server.command.ServerCommandSource;
 import net.minecraft.server.network.ServerPlayerEntity;
+import net.minecraft.server.world.ServerWorld;
 import net.minecraft.text.Text;
 import net.minecraft.util.ActionResult;
 import net.minecraft.util.Hand;
@@ -50,8 +52,7 @@ public class TesseractMod implements ModInitializer {
 	public static final Logger LOGGER = LoggerFactory.getLogger("tesseract");
 	private static final Item BUILD_WAND = Items.WOODEN_AXE;
 	private static final Item CONTEXT_WAND = Items.GOLDEN_AXE;
-	private static final int MAX_REGION_SIZE = 32;
-	private static final int DEFAULT_BUILD_HEIGHT = 12;
+	private static final int MAX_REGION_SIZE = 32; // still used by /tesseract paste
 	private static final String DEMO_CABIN_PROMPT = "Small cozy oak cabin with a peaked roof and a stone foundation";
 	private static final String DEMO_GATE_PROMPT = "Gothic stone gate entrance with torches and a central arch";
 
@@ -72,7 +73,7 @@ public class TesseractMod implements ModInitializer {
 				})
 				.then(literal("help")
 					.executes(context -> {
-						sendMessage(context.getSource(), "Commands: /tesseract build <prompt>, /tesseract paste <url>, /tesseract clear, /tesseract context clear");
+						sendMessage(context.getSource(), "Punch the ground with a wooden axe to set a build anchor, then /tesseract build <prompt>. Golden axe = context region. /tesseract clear to reset anchor.");
 						return 1;
 					})
 				)
@@ -132,15 +133,10 @@ public class TesseractMod implements ModInitializer {
 		});
 
 		AttackBlockCallback.EVENT.register((player, world, hand, pos, direction) -> {
-			if (world.isClient) {
-				return ActionResult.PASS;
-			}
-			if (hand != Hand.MAIN_HAND) {
-				return ActionResult.PASS;
-			}
+			if (world.isClient || hand != Hand.MAIN_HAND) return ActionResult.PASS;
 			Item held = player.getStackInHand(hand).getItem();
 			if (held == BUILD_WAND) {
-				handleCornerClick(player.getUuid(), world, pos, true);
+				setBuildAnchor(player.getUuid(), world, pos);
 				return ActionResult.SUCCESS;
 			}
 			if (held == CONTEXT_WAND) {
@@ -151,16 +147,11 @@ public class TesseractMod implements ModInitializer {
 		});
 
 		UseBlockCallback.EVENT.register((player, world, hand, hitResult) -> {
-			if (world.isClient) {
-				return ActionResult.PASS;
-			}
-			if (hand != Hand.MAIN_HAND) {
-				return ActionResult.PASS;
-			}
+			if (world.isClient || hand != Hand.MAIN_HAND) return ActionResult.PASS;
 			Item held = player.getStackInHand(hand).getItem();
 			BlockPos pos = hitResult.getBlockPos();
 			if (held == BUILD_WAND) {
-				handleCornerClick(player.getUuid(), world, pos, true);
+				setBuildAnchor(player.getUuid(), world, pos);
 				return ActionResult.SUCCESS;
 			}
 			if (held == CONTEXT_WAND) {
@@ -256,30 +247,28 @@ public class TesseractMod implements ModInitializer {
 			return 0;
 		}
 		Selection selection = SelectionManager.getBuildSelection(player.getUuid());
-		if (selection == null || !selection.isComplete()) {
-			sendMessage(source, "Error: you haven't selected a region yet. Select two corners first.");
+		if (selection == null || selection.getCornerA() == null) {
+			sendMessage(source, "Error: no build anchor set. Punch the ground with a wooden axe first.");
 			return 0;
 		}
-		BlockPos size = selection.getSize();
-		if (size == null) {
-			sendMessage(source, "Error: invalid selection.");
-			return 0;
-		}
-		if (size.getX() > MAX_REGION_SIZE || size.getY() > MAX_REGION_SIZE || size.getZ() > MAX_REGION_SIZE) {
-			sendMessage(source, "Error: selected region is too large (max 32x32x32).");
-			return 0;
-		}
+		BlockPos anchor = selection.getCornerA();
 
 		BuildJobManager.start(player.getUuid());
 		sendMessage(source, "Tesseract drafting: \"" + prompt + "\"");
-		int effectiveHeight = (size != null && size.getY() <= 1) ? DEFAULT_BUILD_HEIGHT : size.getY();
-		sendMessage(source, "Selection footprint: " + size.getX() + "x" + size.getZ() + " (height " + effectiveHeight + ")");
+		sendMessage(source, "Anchor: " + anchor.getX() + " " + anchor.getY() + " " + anchor.getZ() + " — size will be determined by the model.");
 
 		Selection contextSelection = SelectionManager.getContextSelection(player.getUuid());
 		if (contextSelection != null && contextSelection.isComplete()) {
 			sendMessage(source, "Context attached (cyan selection).");
 		}
-		Orchestrator.getInstance().run(player, selection, contextSelection, prompt, null, null);
+		try {
+			Orchestrator.getInstance().run(player, selection, contextSelection, prompt, null, null);
+		} catch (Exception e) {
+			LOGGER.error("Orchestrator.run() threw unexpectedly", e);
+			sendMessage(source, "Tesseract error: " + e.getMessage());
+			BuildJobManager.finish(player.getUuid());
+			return 0;
+		}
 		return 1;
 	}
 
@@ -312,6 +301,36 @@ public class TesseractMod implements ModInitializer {
 		return 1;
 	}
 
+	/**
+	 * Sets the build anchor to the punched block and spawns a ring of particles
+	 * so the player can see where their build will be centered.
+	 */
+	private static void setBuildAnchor(UUID playerId, World world, BlockPos anchor) {
+		Selection selection = SelectionManager.getBuildSelection(playerId);
+		// Store as cornerA == cornerB so isComplete() returns true but getSize() == (1,1,1).
+		// The Orchestrator will replace this with the real selection after interpretation.
+		selection.setCornerA(anchor);
+		selection.setCornerB(anchor);
+
+		ServerPlayerEntity player = getServerPlayer(world, playerId);
+		if (player != null) {
+			sendMessage(player.getCommandSource(),
+				"Build anchor set at " + anchor.getX() + " " + anchor.getY() + " " + anchor.getZ()
+				+ " — run /tesseract build <prompt>");
+			sendSelectionToClient(player, true);
+
+			// Ring of END_ROD particles as visual confirmation
+			ServerWorld sw = (ServerWorld) world;
+			for (int deg = 0; deg < 360; deg += 18) {
+				double rad = Math.toRadians(deg);
+				double px = anchor.getX() + 0.5 + 3.5 * Math.cos(rad);
+				double pz = anchor.getZ() + 0.5 + 3.5 * Math.sin(rad);
+				sw.spawnParticles(ParticleTypes.END_ROD, px, anchor.getY() + 0.1, pz, 1, 0, 0.08, 0, 0.01);
+			}
+		}
+	}
+
+	/** Two-corner selection used only by the context (golden axe) wand. */
 	private static void handleCornerClick(UUID playerId, World world, BlockPos pos, boolean isBuild) {
 		Selection selection = isBuild
 			? SelectionManager.getBuildSelection(playerId)
@@ -319,33 +338,24 @@ public class TesseractMod implements ModInitializer {
 
 		boolean isCornerA;
 		if (selection.getCornerA() == null) {
-			// First click: set Corner 1
 			isCornerA = true;
 			selection.setCornerA(pos);
 			selection.clearCornerB();
 		} else if (selection.getCornerB() == null) {
-			// Second click: set Corner 2
 			isCornerA = false;
 			selection.setCornerB(pos);
 		} else {
-			// Both corners set: reset and start new selection (Corner 1)
 			isCornerA = true;
 			selection.setCornerA(pos);
 			selection.clearCornerB();
 		}
-		if (!world.isClient) {
-			ServerPlayerEntity player = getServerPlayer(world, playerId);
-			if (player != null) {
-				sendMessage(player.getCommandSource(), formatCornerMessage(isBuild, isCornerA, pos));
-				sendSelectionToClient(player, isBuild);
-			}
+		ServerPlayerEntity player = getServerPlayer(world, playerId);
+		if (player != null) {
+			String which = isCornerA ? "Corner 1" : "Corner 2";
+			sendMessage(player.getCommandSource(),
+				"Context " + which + " set: " + pos.getX() + " " + pos.getY() + " " + pos.getZ());
+			sendSelectionToClient(player, isBuild);
 		}
-	}
-
-	private static String formatCornerMessage(boolean isBuild, boolean isCornerA, BlockPos pos) {
-		String which = isCornerA ? "Corner 1" : "Corner 2";
-		String type = isBuild ? "Build" : "Context";
-		return type + " " + which + " set: " + pos.getX() + " " + pos.getY() + " " + pos.getZ();
 	}
 
 	private static ServerPlayerEntity getServerPlayer(World world, UUID playerId) {
