@@ -268,9 +268,9 @@ Create `src/main/java/com/rayyan/tesseract/agent/PlacementAgent.java`:
 
 ### 8.2 — Throttled vs instant placement
 
-- [ ] Keep `BuildQueueManager`'s 20-blocks-per-tick throttled placement for the normal build path — this gives the animated feel
-- [ ] Keep the instant placement path (`startInstantBuild`) for the paste command — `PlanPasteClient` is unchanged
-- [ ] The `PlacementAgent` queues its ops into `BuildQueueManager` the same way the old code did; the only difference is it's invoked component-by-component rather than with the entire plan at once
+- [x] Keep `BuildQueueManager`'s 20-blocks-per-tick throttled placement for the normal build path — this gives the animated feel
+- [x] Keep the instant placement path (`startInstantBuild`) for the paste command — `PlanPasteClient` is unchanged
+- [x] The `PlacementAgent` queues its ops into `BuildQueueManager` the same way the old code did; the only difference is it's invoked component-by-component rather than with the entire plan at once
 
 ### 8.3 — Progress events per component
 
