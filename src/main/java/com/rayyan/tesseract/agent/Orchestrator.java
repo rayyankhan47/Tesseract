@@ -147,11 +147,22 @@ public final class Orchestrator {
                 transition(state, OrchestratorState.PLACING);
             }
             case PLACING -> {
-                emit(state, "Orchestrator", "→ PLACING");
-                // TODO(Step 8): replace stub with PlacementAgent.placeComponent(state, world, ops, comp,
-                //     () -> state.player.getServer().execute(() -> advanceOrComplete(state)),
-                //     err -> state.player.getServer().execute(() -> failBuild(state, err)));
-                failBuild(state, "PlacementAgent not yet implemented (Step 8).");
+                ComponentPlan comp = currentComponent(state);
+                if (comp == null || comp.pendingOps == null) {
+                    failBuild(state, "PLACING: no pending ops for component at index " + state.currentComponentIndex);
+                    return;
+                }
+                emit(state, "Orchestrator", "→ PLACING component '" + comp.name + "' (" + comp.pendingOps.size() + " blocks)");
+                net.minecraft.server.world.ServerWorld world =
+                        (net.minecraft.server.world.ServerWorld) state.player.getWorld();
+                PlacementAgent.placeComponent(state, world, comp.pendingOps, comp,
+                    () -> {
+                        // Already on the server thread — BuildQueueManager.tick() runs there.
+                        emit(state, "Placement", "Placed component '" + comp.name
+                                + "' (" + comp.pendingOps.size() + " blocks)");
+                        advanceOrComplete(state);
+                    },
+                    err -> state.player.getServer().execute(() -> failBuild(state, err)));
             }
             case COMPLETE -> {
                 int totalBlocks = state.completedOps.size();

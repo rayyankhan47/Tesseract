@@ -76,6 +76,18 @@ public final class BuildQueueManager {
 		return true;
 	}
 
+	/**
+	 * Queues one component's ops for throttled placement (20 blocks/tick).
+	 * Calls {@code onComplete} on the server thread when all ops are placed,
+	 * instead of calling {@link BuildJobManager#finish} — used by PlacementAgent.
+	 */
+	public static void startComponentBuild(UUID playerId, ServerWorld world, BlockPos origin,
+	                                        List<GumloopPayload.BlockOp> ops, Runnable onComplete) {
+		if (playerId == null || world == null || origin == null || ops == null) return;
+		BuildJob job = new BuildJob(playerId, world, origin, ops, onComplete);
+		ACTIVE_JOBS.put(playerId, job);
+	}
+
 	public static void tick(MinecraftServer server) {
 		for (Map.Entry<UUID, BuildJob> entry : ACTIVE_JOBS.entrySet()) {
 			BuildJob job = entry.getValue();
@@ -86,7 +98,11 @@ public final class BuildQueueManager {
 			boolean done = job.tick(server);
 			if (done) {
 				ACTIVE_JOBS.remove(entry.getKey());
-				BuildJobManager.finish(entry.getKey());
+				// Agent-path jobs supply onComplete callback which handles Orchestrator advancement.
+				// Only call BuildJobManager.finish for legacy paste-path jobs (no callback).
+				if (job.onComplete == null) {
+					BuildJobManager.finish(entry.getKey());
+				}
 			}
 		}
 	}
@@ -96,15 +112,25 @@ public final class BuildQueueManager {
 		private final ServerWorld world;
 		private final BlockPos origin;
 		private final List<GumloopPayload.BlockOp> ops;
+		/** Non-null for agent-path builds: called instead of BuildJobManager.finish on completion. */
+		private final Runnable onComplete;
 		private int index;
 		private int placed;
 		private long lastProgressAt;
 
+		/** Legacy constructor — calls BuildJobManager.finish on completion (paste path). */
 		private BuildJob(UUID playerId, ServerWorld world, BlockPos origin, List<GumloopPayload.BlockOp> ops) {
+			this(playerId, world, origin, ops, null);
+		}
+
+		/** Agent-path constructor — calls onComplete callback on completion. */
+		private BuildJob(UUID playerId, ServerWorld world, BlockPos origin,
+		                 List<GumloopPayload.BlockOp> ops, Runnable onComplete) {
 			this.playerId = playerId;
 			this.world = world;
 			this.origin = origin;
 			this.ops = ops;
+			this.onComplete = onComplete;
 			this.index = 0;
 			this.placed = 0;
 			this.lastProgressAt = System.currentTimeMillis();
@@ -142,7 +168,11 @@ public final class BuildQueueManager {
 				lastProgressAt = now;
 			}
 			if (index >= ops.size()) {
-				player.sendMessage(Text.of("Build complete: " + placed + " blocks."), false);
+				if (onComplete != null) {
+					onComplete.run();
+				} else {
+					player.sendMessage(Text.of("Build complete: " + placed + " blocks."), false);
+				}
 				return true;
 			}
 			return false;

@@ -261,10 +261,10 @@ Wrap the existing block placement logic from `BuildQueueManager` into a `Placeme
 
 Create `src/main/java/com/rayyan/tesseract/agent/PlacementAgent.java`:
 
-- [ ] Static method: `void placeComponent(BuildState state, ServerWorld world, List<BlockOp> ops, ComponentPlan component, Runnable onComplete, Consumer<String> onError)` — translates each op's relative coordinates to world coordinates using `state.placementOrigin + component.originX/Y/Z + op.x/y/z`, then places blocks
-- [ ] Copy the `toBlockState(String blockId)` helper from `BuildQueueManager` exactly as-is
-- [ ] Copy the chunk-loaded check from `BuildQueueManager` exactly as-is
-- [ ] Appends placed ops to `state.completedOps` so the full build accumulates across components
+- [x] Static method: `void placeComponent(BuildState state, ServerWorld world, List<BlockOp> ops, ComponentPlan component, Runnable onComplete, Consumer<String> onError)` — translates each op's relative coordinates to world coordinates using `state.placementOrigin + component.originX/Y/Z + op.x/y/z`, then places blocks
+- [x] Copy the `toBlockState(String blockId)` helper from `BuildQueueManager` exactly as-is
+- [x] Copy the chunk-loaded check from `BuildQueueManager` exactly as-is
+- [x] Appends placed ops to `state.completedOps` so the full build accumulates across components
 
 ### 8.2 — Throttled vs instant placement
 
