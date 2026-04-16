@@ -31,7 +31,7 @@ The input and output of the system are unchanged: player types a prompt, blocks 
 - [x] **Step 2** — Define BuildState and event system
 - [x] **Step 3** — Build the Orchestrator and state machine
 - [x] **Step 4** — Build InterpretationAgent
-- [ ] **Step 5** — Build PlanningAgent
+- [x] **Step 5** — Build PlanningAgent
 - [ ] **Step 6** — Build GenerationAgent
 - [ ] **Step 7** — Build CriticAgent
 - [ ] **Step 8** — Extract PlacementAgent
@@ -190,7 +190,7 @@ Create `src/main/java/com/rayyan/tesseract/agent/PlanningAgent.java`:
 
 ### 5.3 — Connect to Orchestrator
 
-- [ ] In `Orchestrator.transition(state, PLANNING)`, call `PlanningAgent.run(state, gemini, () -> { state.currentComponentIndex = 0; transition(state, GENERATING); }, err -> failBuild(state, err))`
+- [x] In `Orchestrator.transition(state, PLANNING)`, call `PlanningAgent.run(state, gemini, () -> { state.currentComponentIndex = 0; transition(state, GENERATING); }, err -> failBuild(state, err))`
 
 ---
 

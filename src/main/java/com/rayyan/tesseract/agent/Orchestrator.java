@@ -98,13 +98,16 @@ public final class Orchestrator {
             case PLANNING -> {
                 emit(state, "Orchestrator", "→ PLANNING");
                 AgentProgressManager.updateLabel(state.playerId, "Planning structure…");
-                // TODO(Step 5): replace stub with PlanningAgent.run(state, getGemini(),
-                //     () -> state.player.getServer().execute(() -> {
-                //         state.currentComponentIndex = 0;
-                //         transition(state, OrchestratorState.GENERATING);
-                //     }),
-                //     err -> state.player.getServer().execute(() -> failBuild(state, err)));
-                failBuild(state, "PlanningAgent not yet implemented (Step 5).");
+                PlanningAgent.run(state, getGemini(),
+                    () -> state.player.getServer().execute(() -> {
+                        emit(state, "PlanningAgent",
+                                "Plan: " + state.componentPlan.stream()
+                                        .map(c -> c.name).reduce((a, b) -> a + " → " + b).orElse("(empty)")
+                                + " (" + state.componentPlan.size() + " components)");
+                        state.currentComponentIndex = 0;
+                        transition(state, OrchestratorState.GENERATING);
+                    }),
+                    err -> state.player.getServer().execute(() -> failBuild(state, err)));
             }
             case GENERATING -> {
                 ComponentPlan comp = currentComponent(state);
