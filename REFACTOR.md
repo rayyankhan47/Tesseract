@@ -34,7 +34,7 @@ The input and output of the system are unchanged: player types a prompt, blocks 
 - [x] **Step 5** — Build PlanningAgent
 - [x] **Step 6** — Build GenerationAgent
 - [x] **Step 7** — Build CriticAgent
-- [ ] **Step 8** — Extract PlacementAgent
+- [x] **Step 8** — Extract PlacementAgent
 - [ ] **Step 9** — Wire everything end-to-end and test
 - [ ] **Step 10** — Add image reference support (multimodal)
 
@@ -274,8 +274,8 @@ Create `src/main/java/com/rayyan/tesseract/agent/PlacementAgent.java`:
 
 ### 8.3 — Progress events per component
 
-- [ ] After each component is fully placed, emit a `BuildEvent`: "Placed component '{name}' ({n} blocks)"
-- [ ] After all components are placed, call `Orchestrator.transition(state, COMPLETE)` which emits "Build complete: {total} blocks across {n} components. ({failedCount} components skipped.)" and removes the `BuildJobManager` lock
+- [x] After each component is fully placed, emit a `BuildEvent`: "Placed component '{name}' ({n} blocks)"
+- [x] After all components are placed, call `Orchestrator.transition(state, COMPLETE)` which emits "Build complete: {total} blocks across {n} components. ({failedCount} components skipped.)" and removes the `BuildJobManager` lock
 
 ---
 

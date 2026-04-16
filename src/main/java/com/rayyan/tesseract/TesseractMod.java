@@ -117,6 +117,7 @@ public class TesseractMod implements ModInitializer {
 		ServerTickEvents.END_SERVER_TICK.register(server -> {
 			BuildJobManager.tick();
 			BuildQueueManager.tick(server);
+			com.rayyan.tesseract.agent.Orchestrator.getInstance().tick(server);
 		});
 
 		AttackBlockCallback.EVENT.register((player, world, hand, pos, direction) -> {
