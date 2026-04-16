@@ -1,7 +1,5 @@
 package com.rayyan.tesseract.agent;
 
-import com.rayyan.tesseract.gumloop.GumloopPayload;
-
 import java.util.List;
 
 /**
@@ -45,5 +43,5 @@ public final class ComponentPlan {
      * Block operations approved by CriticAgent for this component.
      * Set by GenerationAgent on success; consumed by PlacementAgent.
      */
-    List<GumloopPayload.BlockOp> pendingOps;
+    List<BlockOp> pendingOps;
 }

@@ -1,6 +1,7 @@
 package com.rayyan.tesseract.jobs;
 
-import com.rayyan.tesseract.gumloop.GumloopPayload;
+import com.rayyan.tesseract.agent.BlockOp;
+import com.rayyan.tesseract.paste.BuildPlan;
 import com.rayyan.tesseract.selection.Selection;
 import net.minecraft.block.Block;
 import net.minecraft.block.BlockState;
@@ -25,7 +26,7 @@ public final class BuildQueueManager {
 
 	private BuildQueueManager() {}
 
-	public static boolean startBuild(ServerPlayerEntity player, Selection selection, GumloopPayload.Response plan) {
+	public static boolean startBuild(ServerPlayerEntity player, Selection selection, BuildPlan plan) {
 		if (player == null || selection == null || plan == null || plan.ops == null) {
 			return false;
 		}
@@ -46,7 +47,7 @@ public final class BuildQueueManager {
 		return true;
 	}
 
-	public static boolean startInstantBuild(ServerPlayerEntity player, Selection selection, GumloopPayload.Response plan) {
+	public static boolean startInstantBuild(ServerPlayerEntity player, Selection selection, BuildPlan plan) {
 		if (player == null || selection == null || plan == null || plan.ops == null) {
 			return false;
 		}
@@ -58,7 +59,7 @@ public final class BuildQueueManager {
 		ServerWorld world = (ServerWorld) player.getWorld();
 		int placed = 0;
 		for (int i = 0; i < plan.ops.size(); i++) {
-			GumloopPayload.BlockOp op = plan.ops.get(i);
+			BlockOp op = plan.ops.get(i);
 			BlockPos pos = origin.add(op.x, op.y, op.z);
 			if (!world.isChunkLoaded(pos)) {
 				player.sendMessage(Text.of("Error: build halted, chunk not loaded near " + pos.getX() + " " + pos.getY() + " " + pos.getZ()), false);
@@ -82,7 +83,7 @@ public final class BuildQueueManager {
 	 * instead of calling {@link BuildJobManager#finish} — used by PlacementAgent.
 	 */
 	public static void startComponentBuild(UUID playerId, ServerWorld world, BlockPos origin,
-	                                        List<GumloopPayload.BlockOp> ops, Runnable onComplete) {
+	                                        List<BlockOp> ops, Runnable onComplete) {
 		if (playerId == null || world == null || origin == null || ops == null) return;
 		BuildJob job = new BuildJob(playerId, world, origin, ops, onComplete);
 		ACTIVE_JOBS.put(playerId, job);
@@ -111,7 +112,7 @@ public final class BuildQueueManager {
 		private final UUID playerId;
 		private final ServerWorld world;
 		private final BlockPos origin;
-		private final List<GumloopPayload.BlockOp> ops;
+		private final List<BlockOp> ops;
 		/** Non-null for agent-path builds: called instead of BuildJobManager.finish on completion. */
 		private final Runnable onComplete;
 		private int index;
@@ -119,13 +120,13 @@ public final class BuildQueueManager {
 		private long lastProgressAt;
 
 		/** Legacy constructor — calls BuildJobManager.finish on completion (paste path). */
-		private BuildJob(UUID playerId, ServerWorld world, BlockPos origin, List<GumloopPayload.BlockOp> ops) {
+		private BuildJob(UUID playerId, ServerWorld world, BlockPos origin, List<BlockOp> ops) {
 			this(playerId, world, origin, ops, null);
 		}
 
 		/** Agent-path constructor — calls onComplete callback on completion. */
 		private BuildJob(UUID playerId, ServerWorld world, BlockPos origin,
-		                 List<GumloopPayload.BlockOp> ops, Runnable onComplete) {
+		                 List<BlockOp> ops, Runnable onComplete) {
 			this.playerId = playerId;
 			this.world = world;
 			this.origin = origin;
@@ -146,7 +147,7 @@ public final class BuildQueueManager {
 			}
 			int opsThisTick = 0;
 			while (opsThisTick < BLOCKS_PER_TICK && index < ops.size()) {
-				GumloopPayload.BlockOp op = ops.get(index);
+				BlockOp op = ops.get(index);
 				BlockPos pos = origin.add(op.x, op.y, op.z);
 				if (!world.isChunkLoaded(pos)) {
 					player.sendMessage(Text.of("Error: build halted, chunk not loaded near " + pos.getX() + " " + pos.getY() + " " + pos.getZ()), false);

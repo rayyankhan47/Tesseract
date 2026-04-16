@@ -1,7 +1,6 @@
 package com.rayyan.tesseract.paste;
 
 import com.rayyan.tesseract.TesseractMod;
-import com.rayyan.tesseract.gumloop.GumloopPayload;
 import com.rayyan.tesseract.jobs.BuildJobManager;
 import com.rayyan.tesseract.jobs.BuildQueueManager;
 import com.rayyan.tesseract.selection.Selection;
@@ -71,7 +70,7 @@ public final class PlanPasteClient {
 						BuildJobManager.finish(player.getUuid());
 						return;
 					}
-					GumloopPayload.Response plan = result.plan;
+					BuildPlan plan = result.plan;
 					if (plan == null || plan.ops == null) {
 						player.sendMessage(Text.of("Error: plan response missing ops (request " + requestId + ")."), false);
 						BuildJobManager.finish(player.getUuid());

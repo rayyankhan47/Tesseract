@@ -1,6 +1,5 @@
 package com.rayyan.tesseract.agent;
 
-import com.rayyan.tesseract.gumloop.GumloopPayload;
 import com.rayyan.tesseract.jobs.BuildQueueManager;
 import net.minecraft.block.Block;
 import net.minecraft.block.BlockState;
@@ -51,7 +50,7 @@ public final class PlacementAgent {
      */
     public static void placeComponent(BuildState state,
                                        ServerWorld world,
-                                       List<GumloopPayload.BlockOp> ops,
+                                       List<BlockOp> ops,
                                        ComponentPlan component,
                                        Runnable onComplete,
                                        Consumer<String> onError) {
@@ -65,7 +64,7 @@ public final class PlacementAgent {
                 .add(component.originX, component.originY, component.originZ);
 
         // Validate chunk availability and block IDs before queuing.
-        for (GumloopPayload.BlockOp op : ops) {
+        for (BlockOp op : ops) {
             BlockPos worldPos = componentOrigin.add(op.x, op.y, op.z);
             if (!world.isChunkLoaded(worldPos)) {
                 onError.accept("chunk not loaded near " + worldPos.getX()
@@ -79,9 +78,9 @@ public final class PlacementAgent {
         }
 
         // Build world-coordinate copies for state.completedOps accumulation.
-        List<GumloopPayload.BlockOp> worldOps = new ArrayList<>(ops.size());
-        for (GumloopPayload.BlockOp op : ops) {
-            GumloopPayload.BlockOp w = new GumloopPayload.BlockOp();
+        List<BlockOp> worldOps = new ArrayList<>(ops.size());
+        for (BlockOp op : ops) {
+            BlockOp w = new BlockOp();
             w.x = componentOrigin.getX() + op.x;
             w.y = componentOrigin.getY() + op.y;
             w.z = componentOrigin.getZ() + op.z;

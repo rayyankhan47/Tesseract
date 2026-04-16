@@ -2,7 +2,7 @@ package com.rayyan.tesseract.agent;
 
 import com.google.gson.Gson;
 import com.rayyan.tesseract.api.GeminiClient;
-import com.rayyan.tesseract.gumloop.GumloopPayload;
+import com.rayyan.tesseract.paste.BuildPlan;
 import com.rayyan.tesseract.jobs.BuildJobManager;
 import com.rayyan.tesseract.selection.Selection;
 import net.minecraft.server.MinecraftServer;
@@ -373,16 +373,16 @@ public final class Orchestrator {
         return state.componentPlan.get(state.currentComponentIndex);
     }
 
-    /** Serialises the completed build as a GumloopPayload.Response-compatible JSON string. */
+    /** Serialises the completed build as a { meta, ops } JSON string for the web dashboard. */
     private static String buildPlanJson(BuildState state) {
-        GumloopPayload.Response response = new GumloopPayload.Response();
-        response.ops = new ArrayList<>(state.completedOps);
-        response.meta = new GumloopPayload.Meta();
-        response.meta.blockCount = state.completedOps.size();
-        response.meta.theme = state.spec != null ? state.spec.type : "web_build";
+        BuildPlan plan = new BuildPlan();
+        plan.ops = new ArrayList<>(state.completedOps);
+        plan.meta = new BuildPlan.Meta();
+        plan.meta.blockCount = state.completedOps.size();
+        plan.meta.theme = state.spec != null ? state.spec.type : "web_build";
         if (!state.failedComponentIds.isEmpty()) {
-            response.meta.warnings = new ArrayList<>(state.failedComponentIds);
+            plan.meta.warnings = new ArrayList<>(state.failedComponentIds);
         }
-        return GSON.toJson(response);
+        return GSON.toJson(plan);
     }
 }

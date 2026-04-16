@@ -170,7 +170,7 @@ public class TesseractMod implements ModInitializer {
 	 * Starts a minimal HTTP server on port 4891.
 	 *
 	 * POST /build  — body: {"prompt":"...","imageBase64":"...","imageMimeType":"..."}
-	 *              — response: GumloopPayload.Response JSON for plan_server.py to store
+	 *              — response: BuildPlan JSON for plan_server.py to store
 	 *
 	 * Port 4890 is already used by tools/plan_server.py and must not be disturbed.
 	 */

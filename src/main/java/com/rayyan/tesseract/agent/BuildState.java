@@ -1,6 +1,5 @@
 package com.rayyan.tesseract.agent;
 
-import com.rayyan.tesseract.gumloop.GumloopPayload;
 import com.rayyan.tesseract.selection.Selection;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.util.math.BlockPos;
@@ -41,7 +40,7 @@ public final class BuildState {
     int currentComponentIndex;
 
     // ---- Placement accumulator ----
-    List<GumloopPayload.BlockOp> completedOps;
+    List<BlockOp> completedOps;
     List<String> failedComponentIds;
 
     // ---- Spatial context ----

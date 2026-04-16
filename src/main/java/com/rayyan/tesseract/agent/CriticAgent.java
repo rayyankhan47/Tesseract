@@ -1,6 +1,6 @@
 package com.rayyan.tesseract.agent;
 
-import com.rayyan.tesseract.gumloop.GumloopPayload;
+import com.rayyan.tesseract.agent.BlockOp;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -10,12 +10,11 @@ import java.util.List;
 /**
  * Stage 4 of the build pipeline — programmatic validation of a single component's block array.
  *
- * No LLM involved. Five checks, applied in order:
+ * No LLM involved. Four checks, applied in order:
  *   1. Null / empty
  *   2. Palette conformance
- *   3. In-bounds coordinates
- *   4. Floating block detection (structural support)
- *   5. Budget enforcement (non-fatal truncation — handled in Step 7.3)
+ *   3. Floating block detection (structural support)
+ *   4. Budget enforcement (non-fatal truncation)
  */
 public final class CriticAgent {
 
@@ -33,7 +32,7 @@ public final class CriticAgent {
      * @param componentCount total number of components (used to derive per-component budget)
      * @return a {@link CriticResult} — passed or failed with a human-readable reason
      */
-    public static CriticResult validate(List<GumloopPayload.BlockOp> ops,
+    public static CriticResult validate(List<BlockOp> ops,
                                         ComponentPlan component,
                                         List<String> palette,
                                         int totalMaxBlocks,
@@ -45,7 +44,7 @@ public final class CriticAgent {
 
         // Check 2 — palette conformance
         List<String> violations = new ArrayList<>();
-        for (GumloopPayload.BlockOp op : ops) {
+        for (BlockOp op : ops) {
             if (op.block == null || op.block.isBlank()) {
                 violations.add("<null>");
                 continue;
@@ -59,22 +58,11 @@ public final class CriticAgent {
             return CriticResult.fail("blocks not in palette: " + violations.subList(0, Math.min(5, violations.size())));
         }
 
-        // Check 3 — in-bounds coordinates
-        for (GumloopPayload.BlockOp op : ops) {
-            if (op.x < 0 || op.x >= component.sizeX
-                    || op.y < 0 || op.y >= component.sizeY
-                    || op.z < 0 || op.z >= component.sizeZ) {
-                return CriticResult.fail(String.format(
-                        "block out of bounds at (%d,%d,%d) — component box is %dx%dx%d",
-                        op.x, op.y, op.z, component.sizeX, component.sizeY, component.sizeZ));
-            }
-        }
-
-        // Check 4 — floating block detection (structural support)
+        // Check 3 — floating block detection (structural support)
         CriticResult floatCheck = checkFloating(ops, component);
         if (!floatCheck.passed()) return floatCheck;
 
-        // Check 5 — budget enforcement (non-fatal: truncate ops, log warning)
+        // Check 4 — budget enforcement (non-fatal: truncate ops, log warning)
         if (componentCount > 0 && totalMaxBlocks > 0) {
             int budget = Math.max(1, totalMaxBlocks / componentCount);
             if (ops.size() > budget) {
@@ -93,7 +81,7 @@ public final class CriticAgent {
     /**
      * Convenience overload — skips budget check when total/count are unknown.
      */
-    public static CriticResult validate(List<GumloopPayload.BlockOp> ops,
+    public static CriticResult validate(List<BlockOp> ops,
                                         ComponentPlan component,
                                         List<String> palette) {
         return validate(ops, component, palette, 0, 0);
@@ -113,16 +101,15 @@ public final class CriticAgent {
      *
      * If more than 10 % of non-exempt blocks are floating, the check fails.
      */
-    private static CriticResult checkFloating(List<GumloopPayload.BlockOp> ops, ComponentPlan component) {
-        // Build a coordinate set for O(1) lookup.
+    private static CriticResult checkFloating(List<BlockOp> ops, ComponentPlan component) {
         java.util.Set<Long> occupied = new java.util.HashSet<>();
-        for (GumloopPayload.BlockOp op : ops) {
+        for (BlockOp op : ops) {
             occupied.add(key(op.x, op.y, op.z));
         }
 
         int floating = 0;
         int nonExempt = 0;
-        for (GumloopPayload.BlockOp op : ops) {
+        for (BlockOp op : ops) {
             if (op.y == 0) continue; // resting on the component's base row — always supported
             if (isExempt(op.block)) continue;
             nonExempt++;

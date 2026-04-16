@@ -8,7 +8,6 @@ import com.google.gson.JsonParser;
 import com.google.gson.JsonPrimitive;
 import com.google.gson.JsonSyntaxException;
 import com.rayyan.tesseract.TesseractMod;
-import com.rayyan.tesseract.gumloop.GumloopPayload;
 import com.rayyan.tesseract.selection.Selection;
 import net.minecraft.util.math.BlockPos;
 
@@ -32,15 +31,15 @@ public final class PlanParser {
     // -------------------------------------------------------------------------
 
     public static final class PlanValidationResult {
-        public final GumloopPayload.Response plan;
+        public final BuildPlan plan;
         public final String error;
 
-        private PlanValidationResult(GumloopPayload.Response plan, String error) {
+        private PlanValidationResult(BuildPlan plan, String error) {
             this.plan = plan;
             this.error = error;
         }
 
-        public static PlanValidationResult success(GumloopPayload.Response plan) {
+        public static PlanValidationResult success(BuildPlan plan) {
             return new PlanValidationResult(plan, null);
         }
 
@@ -75,12 +74,12 @@ public final class PlanParser {
             TesseractMod.LOGGER.warn("PlanParser {} -> validation failed: {}", requestId, validationError);
             return PlanValidationResult.error(validationError);
         }
-        GumloopPayload.Response plan = GSON.fromJson(planJson, GumloopPayload.Response.class);
+        BuildPlan plan = GSON.fromJson(planJson, BuildPlan.class);
         if (plan == null || plan.ops == null) {
             return PlanValidationResult.error("Parsed plan is missing ops.");
         }
         if (plan.meta == null) {
-            plan.meta = new GumloopPayload.Meta();
+            plan.meta = new BuildPlan.Meta();
             plan.meta.blockCount = plan.ops.size();
         }
         return PlanValidationResult.success(plan);

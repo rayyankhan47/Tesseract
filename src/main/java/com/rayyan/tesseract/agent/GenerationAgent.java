@@ -1,7 +1,6 @@
 package com.rayyan.tesseract.agent;
 
 import com.rayyan.tesseract.api.GeminiClient;
-import com.rayyan.tesseract.gumloop.GumloopPayload;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -153,7 +152,7 @@ public final class GenerationAgent {
                 onCriticFail.accept("Gemini call failed: " + ex.getMessage(), retryAttempt + 1 < MAX_RETRIES);
                 return;
             }
-            List<GumloopPayload.BlockOp> ops;
+            List<BlockOp> ops;
             try {
                 ops = parseOps(responseText);
             } catch (Exception e) {
@@ -169,7 +168,7 @@ public final class GenerationAgent {
     // JSON parsing
     // -------------------------------------------------------------------------
 
-    static List<GumloopPayload.BlockOp> parseOps(String responseText) {
+    static List<BlockOp> parseOps(String responseText) {
         String json = responseText.trim();
         if (json.startsWith("```")) {
             json = json.replaceAll("(?s)^```[a-zA-Z]*\\n?", "").replaceAll("```\\s*$", "").trim();
@@ -179,10 +178,10 @@ public final class GenerationAgent {
             throw new RuntimeException("Expected JSON array, got: " + root.getClass().getSimpleName());
         }
         com.google.gson.JsonArray arr = root.getAsJsonArray();
-        List<GumloopPayload.BlockOp> ops = new java.util.ArrayList<>();
+        List<BlockOp> ops = new java.util.ArrayList<>();
         for (com.google.gson.JsonElement el : arr) {
             com.google.gson.JsonObject obj = el.getAsJsonObject();
-            GumloopPayload.BlockOp op = new GumloopPayload.BlockOp();
+            BlockOp op = new BlockOp();
             op.x = obj.get("x").getAsInt();
             op.y = obj.get("y").getAsInt();
             op.z = obj.get("z").getAsInt();
@@ -199,7 +198,7 @@ public final class GenerationAgent {
     static void handleCriticResult(BuildState state,
                                     GeminiClient gemini,
                                     ComponentPlan component,
-                                    List<GumloopPayload.BlockOp> ops,
+                                    List<BlockOp> ops,
                                     int retryAttempt,
                                     Runnable onCriticPass,
                                     BiConsumer<String, Boolean> onCriticFail) {
