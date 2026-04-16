@@ -30,7 +30,7 @@ The input and output of the system are unchanged: player types a prompt, blocks 
 - [x] **Step 1** — Remove Gumloop, build Gemini client
 - [x] **Step 2** — Define BuildState and event system
 - [x] **Step 3** — Build the Orchestrator and state machine
-- [ ] **Step 4** — Build InterpretationAgent
+- [x] **Step 4** — Build InterpretationAgent
 - [ ] **Step 5** — Build PlanningAgent
 - [ ] **Step 6** — Build GenerationAgent
 - [ ] **Step 7** — Build CriticAgent
@@ -157,7 +157,7 @@ Create `src/main/java/com/rayyan/tesseract/agent/InterpretationAgent.java`:
 
 ### 4.3 — Connect to Orchestrator
 
-- [ ] In `Orchestrator.transition(state, INTERPRETING)`, call `InterpretationAgent.run(state, gemini, () -> transition(state, PLANNING), err -> failBuild(state, err))`
+- [x] In `Orchestrator.transition(state, INTERPRETING)`, call `InterpretationAgent.run(state, gemini, () -> transition(state, PLANNING), err -> failBuild(state, err))`
 
 ---
 

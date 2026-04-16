@@ -84,10 +84,16 @@ public final class Orchestrator {
             case INTERPRETING -> {
                 emit(state, "Orchestrator", "→ INTERPRETING");
                 AgentProgressManager.updateLabel(state.playerId, "Interpreting prompt…");
-                // TODO(Step 4): replace stub with InterpretationAgent.run(state, getGemini(),
-                //     () -> state.player.getServer().execute(() -> transition(state, OrchestratorState.PLANNING)),
-                //     err -> state.player.getServer().execute(() -> failBuild(state, err)));
-                failBuild(state, "InterpretationAgent not yet implemented (Step 4).");
+                InterpretationAgent.run(state, getGemini(),
+                    () -> state.player.getServer().execute(() -> {
+                        emit(state, "InterpretationAgent",
+                                "Interpreted: " + state.spec.type + " (" + state.spec.style + "), "
+                                + state.spec.width + "×" + state.spec.height + "×" + state.spec.depth
+                                + (state.spec.features != null && !state.spec.features.isEmpty()
+                                        ? ", features: " + String.join(", ", state.spec.features) : ""));
+                        transition(state, OrchestratorState.PLANNING);
+                    }),
+                    err -> state.player.getServer().execute(() -> failBuild(state, err)));
             }
             case PLANNING -> {
                 emit(state, "Orchestrator", "→ PLANNING");
