@@ -28,7 +28,7 @@ The input and output of the system are unchanged: player types a prompt, blocks 
 ## Progress Tracker
 
 - [x] **Step 1** — Remove Gumloop, build Gemini client
-- [ ] **Step 2** — Define BuildState and event system
+- [x] **Step 2** — Define BuildState and event system
 - [ ] **Step 3** — Build the Orchestrator and state machine
 - [ ] **Step 4** — Build InterpretationAgent
 - [ ] **Step 5** — Build PlanningAgent
@@ -81,21 +81,21 @@ The Python web server (`web/server.py`) is the other place Gumloop lives. The we
 
 Create `src/main/java/com/rayyan/tesseract/agent/BuildState.java`:
 
-- [ ] Fields: `UUID playerId`, `String originalPrompt`, `byte[] referenceImageBytes` (nullable), `String referenceImageMimeType` (nullable), `BuildSpec spec` (set by InterpretationAgent), `List<ComponentPlan> componentPlan` (set by PlanningAgent), `int currentComponentIndex`, `List<BlockOp> completedOps` (accumulated), `List<String> failedComponentIds`, `BlockPos placementOrigin`, `Selection buildSelection`
-- [ ] Field `OrchestratorState state` — an enum: `IDLE, INTERPRETING, PLANNING, GENERATING, CRITIQUING, PLACING, COMPLETE, FAILED`
-- [ ] Field `List<BuildEvent> eventLog` — append-only log of everything that happened
-- [ ] All fields package-private; only the Orchestrator and agents mutate them; reads are freely accessible
+- [x] Fields: `UUID playerId`, `String originalPrompt`, `byte[] referenceImageBytes` (nullable), `String referenceImageMimeType` (nullable), `BuildSpec spec` (set by InterpretationAgent), `List<ComponentPlan> componentPlan` (set by PlanningAgent), `int currentComponentIndex`, `List<BlockOp> completedOps` (accumulated), `List<String> failedComponentIds`, `BlockPos placementOrigin`, `Selection buildSelection`
+- [x] Field `OrchestratorState state` — an enum: `IDLE, INTERPRETING, PLANNING, GENERATING, CRITIQUING, PLACING, COMPLETE, FAILED`
+- [x] Field `List<BuildEvent> eventLog` — append-only log of everything that happened
+- [x] All fields package-private; only the Orchestrator and agents mutate them; reads are freely accessible
 
 ### 2.2 — Create `BuildEvent.java` and `BuildSpec.java` and `ComponentPlan.java`
 
-- [ ] `BuildEvent.java`: a record with fields `long timestamp`, `String agentName`, `String message` — used for both logging and forwarding to the player UI
-- [ ] `BuildSpec.java`: mirrors the InterpretationAgent output schema — fields `String style`, `String type`, `int width`, `int height`, `int depth`, `List<String> materials`, `List<String> features`, `String rawJson`
-- [ ] `ComponentPlan.java`: mirrors the PlanningAgent output schema — fields `String id`, `String name`, `String description`, `List<String> buildAfter`, `int originX`, `int originY`, `int originZ`, `int sizeX`, `int sizeY`, `int sizeZ` (origin/size filled in by GenerationAgent based on dependency layout)
+- [x] `BuildEvent.java`: a record with fields `long timestamp`, `String agentName`, `String message` — used for both logging and forwarding to the player UI
+- [x] `BuildSpec.java`: mirrors the InterpretationAgent output schema — fields `String style`, `String type`, `int width`, `int height`, `int depth`, `List<String> materials`, `List<String> features`, `String rawJson`
+- [x] `ComponentPlan.java`: mirrors the PlanningAgent output schema — fields `String id`, `String name`, `String description`, `List<String> buildAfter`, `int originX`, `int originY`, `int originZ`, `int sizeX`, `int sizeY`, `int sizeZ` (origin/size filled in by GenerationAgent based on dependency layout)
 
 ### 2.3 — Thread safety
 
-- [ ] `BuildState` is only ever mutated on the Minecraft server thread (all `whenComplete` callbacks already call `player.getServer().execute(() -> ...)` — preserve this pattern)
-- [ ] `eventLog` is the one field that may be read from multiple threads for logging; make it a `CopyOnWriteArrayList`
+- [x] `BuildState` is only ever mutated on the Minecraft server thread (all `whenComplete` callbacks already call `player.getServer().execute(() -> ...)` — preserve this pattern)
+- [x] `eventLog` is the one field that may be read from multiple threads for logging; make it a `CopyOnWriteArrayList`
 
 ---
 
