@@ -35,7 +35,7 @@ The input and output of the system are unchanged: player types a prompt, blocks 
 - [x] **Step 6** — Build GenerationAgent
 - [x] **Step 7** — Build CriticAgent
 - [x] **Step 8** — Extract PlacementAgent
-- [ ] **Step 9** — Wire everything end-to-end and test
+- [x] **Step 9** — Wire everything end-to-end and test
 - [ ] **Step 10** — Add image reference support (multimodal)
 
 ---
@@ -299,14 +299,14 @@ The web dashboard → `server.py` needs to reach the Java mod to trigger a build
 
 ### 9.3 — Register Orchestrator tick and verify the visible log output
 
-- [ ] Add `Orchestrator.tick()` to the `ServerTickEvents.END_SERVER_TICK` handler alongside the existing `BuildJobManager.tick()` and `BuildQueueManager.tick()` calls; `Orchestrator.tick()` cleans up builds that have been stuck in any state for > 5 minutes
-- [ ] Run a test build in-game: `/tesseract build small wooden house` and verify in the server log and player chat that you can see each agent's events in sequence:
+- [x] Add `Orchestrator.tick()` to the `ServerTickEvents.END_SERVER_TICK` handler alongside the existing `BuildJobManager.tick()` and `BuildQueueManager.tick()` calls; `Orchestrator.tick()` cleans up builds that have been stuck in any state for > 5 minutes
+- [x] Run a test build in-game: `/tesseract build small wooden house` and verify in the server log and player chat that you can see each agent's events in sequence:
   - `[Interpretation] Interpreted: cottage, 8×8, style=rustic, features=[door, windows, chimney]`
   - `[Planning] Plan: foundation → walls → roof → chimney → windows → door (6 components)`
   - `[Generation] Generating component 1/6: foundation`
   - `[Critic] Component 1 passed (64 blocks)`
   - `[Placement] Placed component 'foundation' (64 blocks)` — and so on
-- [ ] Run a test build via the web dashboard: open `http://localhost:5173`, type a prompt, click Generate, verify the URL appears, then run `/tesseract paste <url>` in Minecraft and verify blocks are placed
+- [x] Run a test build via the web dashboard: open `http://localhost:5173`, type a prompt, click Generate, verify the URL appears, then run `/tesseract paste <url>` in Minecraft and verify blocks are placed
 
 ---
 
