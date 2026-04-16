@@ -7,10 +7,13 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.google.gson.JsonSyntaxException;
 
+import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Duration;
 import java.util.Base64;
 import java.util.concurrent.CompletableFuture;
@@ -39,15 +42,57 @@ public final class GeminiClient {
         this.apiKey = apiKey;
     }
 
-    /** Reads GEMINI_API_KEY from the environment. Throws if missing. */
+    /**
+     * Reads {@code GEMINI_API_KEY} from the environment, falling back to a
+     * {@code .env} file in the current working directory (project root when
+     * running via {@code ./gradlew runServer}).
+     *
+     * .env format — one {@code KEY=value} pair per line, {@code #} comments ignored,
+     * optional surrounding quotes stripped:
+     * <pre>
+     *   GEMINI_API_KEY=AIza...
+     * </pre>
+     */
     public static GeminiClient fromEnv() {
         String key = System.getenv("GEMINI_API_KEY");
         if (key == null || key.isBlank()) {
+            key = readDotEnv("GEMINI_API_KEY");
+        }
+        if (key == null || key.isBlank()) {
             throw new IllegalStateException(
-                "GEMINI_API_KEY environment variable is not set. " +
-                "Export it before starting the server: export GEMINI_API_KEY=your_key_here");
+                "GEMINI_API_KEY is not set. Add it to a .env file in the project root:\n" +
+                "  GEMINI_API_KEY=your_key_here");
         }
         return new GeminiClient(key);
+    }
+
+    /**
+     * Looks for {@code varName=value} in {@code .env} (CWD).
+     * Returns null if the file doesn't exist or the key isn't present.
+     */
+    private static String readDotEnv(String varName) {
+        Path dotEnv = Path.of(".env");
+        if (!Files.exists(dotEnv)) return null;
+        try {
+            for (String line : Files.readAllLines(dotEnv)) {
+                line = line.strip();
+                if (line.isEmpty() || line.startsWith("#")) continue;
+                int eq = line.indexOf('=');
+                if (eq < 1) continue;
+                if (!line.substring(0, eq).strip().equals(varName)) continue;
+                String value = line.substring(eq + 1).strip();
+                // Strip optional surrounding single or double quotes
+                if (value.length() >= 2
+                        && ((value.startsWith("\"") && value.endsWith("\""))
+                         || (value.startsWith("'")  && value.endsWith("'")))) {
+                    value = value.substring(1, value.length() - 1);
+                }
+                return value.isBlank() ? null : value;
+            }
+        } catch (IOException e) {
+            // .env unreadable — fall through to the missing-key error
+        }
+        return null;
     }
 
     // -------------------------------------------------------------------------
