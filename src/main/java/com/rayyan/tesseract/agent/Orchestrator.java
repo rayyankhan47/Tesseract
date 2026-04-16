@@ -2,9 +2,13 @@ package com.rayyan.tesseract.agent;
 
 import com.google.gson.Gson;
 import com.rayyan.tesseract.api.GeminiClient;
+import com.rayyan.tesseract.blueprint.BlueprintCompileException;
+import com.rayyan.tesseract.blueprint.BlueprintCompiler;
+import com.rayyan.tesseract.blueprint.BlueprintPatcher;
 import com.rayyan.tesseract.paste.BuildPlan;
 import com.rayyan.tesseract.jobs.BuildJobManager;
 import com.rayyan.tesseract.jobs.BuildQueueManager;
+import com.rayyan.tesseract.render.IsoRenderer;
 import com.rayyan.tesseract.selection.Selection;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.network.ServerPlayerEntity;
@@ -38,9 +42,16 @@ public final class Orchestrator {
 
     private static final Orchestrator INSTANCE = new Orchestrator();
     private static final Logger LOGGER = LoggerFactory.getLogger("tesseract.orchestrator");
-    private static final long BUILD_TIMEOUT_MS = 5 * 60 * 1000L;
-    private static final UUID WEB_BUILD_ID = UUID.nameUUIDFromBytes("web".getBytes());
-    private static final Gson GSON = new Gson();
+    private static final long BUILD_TIMEOUT_MS    = 5 * 60 * 1_000L;
+    private static final UUID WEB_BUILD_ID        = UUID.nameUUIDFromBytes("web".getBytes());
+    private static final Gson GSON                = new Gson();
+
+    /** Pixels-per-block for IsoRenderer. Smaller → faster render, coarser Gemini Vision read. */
+    private static final int PPB = 12;
+    /** Maximum compile → render → critic → patch iterations. */
+    private static final int MAX_ITERATIONS = 3;
+    /** Wall-clock cap across all critic passes; if exceeded the loop exits early. */
+    private static final long ITERATION_BUDGET_MS = 90_000L;
 
     /** Active builds keyed by player UUID (or WEB_BUILD_ID for web builds). */
     private final Map<UUID, BuildState> activeBuilds = new ConcurrentHashMap<>();
@@ -129,15 +140,17 @@ public final class Orchestrator {
         state.state = next;
 
         switch (next) {
+
+            // ---- Stage 1: Interpretation ----------------------------------------
             case INTERPRETING -> {
                 emit(state, "Orchestrator", "→ INTERPRETING");
                 AgentProgressManager.updateLabel(state.playerId, "Interpreting prompt…");
                 InterpretationAgent.run(state, getGemini(),
                     () -> onServerThread(state, () -> {
                         boolean usedImage = state.referenceImageBytes != null;
-                        String prefix = usedImage ? "Interpreted with visual reference: " : "Interpreted: ";
+                        String pfx = usedImage ? "Interpreted with visual reference: " : "Interpreted: ";
                         emit(state, "InterpretationAgent",
-                                prefix + state.spec.type + " (" + state.spec.style + "), "
+                                pfx + state.spec.type + " (" + state.spec.style + "), "
                                 + state.spec.width + "×" + state.spec.height + "×" + state.spec.depth
                                 + (state.spec.features != null && !state.spec.features.isEmpty()
                                         ? ", features: " + String.join(", ", state.spec.features) : ""));
@@ -146,33 +159,159 @@ public final class Orchestrator {
                     }),
                     err -> onServerThread(state, () -> failBuild(state, err)));
             }
+
+            // ---- Stage 2: Blueprint planning (renamed BLUEPRINTING in Step 9) ----
             case PLANNING -> {
-                emit(state, "Orchestrator", "→ BLUEPRINTING (via BlueprintPlanningAgent)");
-                AgentProgressManager.updateLabel(state.playerId, "Planning blueprint…");
+                emit(state, "Orchestrator", "→ BLUEPRINTING");
+                AgentProgressManager.updateLabel(state.playerId, "Drafting blueprint…");
                 BlueprintPlanningAgent.run(state, getGemini(),
                     () -> onServerThread(state, () -> {
                         emit(state, "BlueprintPlanningAgent",
                                 "Blueprint '" + state.blueprint.name + "': "
-                                + state.blueprint.primitives.size() + " primitives, "
-                                + state.compiledBlueprint.ops().size() + " blocks");
-                        state.completedOps = new java.util.ArrayList<>(state.compiledBlueprint.ops());
-                        transition(state, OrchestratorState.PLACING);
+                                + state.blueprint.primitives.size() + " primitives");
+                        state.iterationStartMs = System.currentTimeMillis();
+                        transition(state, OrchestratorState.COMPILING);
                     }),
                     err -> onServerThread(state, () -> failBuild(state, err)));
             }
-            case GENERATING -> throw new UnsupportedOperationException(
-                    "GENERATING: old per-component pipeline removed in Refactor 2. " +
-                    "This path should not be reachable until the Step-9 state machine rewrite.");
-            case CRITIQUING -> throw new UnsupportedOperationException(
-                    "CRITIQUING: old programmatic critic removed in Refactor 2. " +
-                    "This path should not be reachable until the Step-9 state machine rewrite.");
+
+            // ---- Stage 3: Compile -----------------------------------------------
+            case COMPILING -> {
+                String passLabel = state.iterationCount > 0
+                        ? " (pass " + (state.iterationCount + 1) + "/" + MAX_ITERATIONS + ")"
+                        : "";
+                emit(state, "Compiler", "Compiling blueprint" + passLabel + "…");
+                AgentProgressManager.updateLabel(state.playerId, "Compiling" + passLabel + "…");
+                try {
+                    state.compiledBlueprint = BlueprintCompiler.compile(state.blueprint);
+                    if (state.compiledBlueprint.ops().isEmpty()) {
+                        failBuild(state, "Blueprint compiled to zero ops — try a different prompt.");
+                        return;
+                    }
+                    emit(state, "Compiler", state.compiledBlueprint.ops().size() + " block ops compiled.");
+                    transition(state, OrchestratorState.RENDERING);
+                } catch (BlueprintCompileException e) {
+                    failBuild(state, "Blueprint compile error: " + e.getMessage());
+                }
+            }
+
+            // ---- Stage 4: Render ------------------------------------------------
+            case RENDERING -> {
+                emit(state, "Renderer", "Rendering isometric view" + 
+                        (state.iterationCount > 0 ? " (pass " + (state.iterationCount + 1) + "/" + MAX_ITERATIONS + ")" : "") + "…");
+                AgentProgressManager.updateLabel(state.playerId, "Rendering view…");
+                try {
+                    state.lastRenderPng = IsoRenderer.renderPng(
+                            state.compiledBlueprint.ops(), state.blueprint.bounds, PPB);
+                    writeDebugBlueprint(state);
+                    IsoRenderer.writeDebugCopy(state.lastRenderPng,
+                            state.playerId.toString() + "_iter" + state.iterationCount,
+                            state.iterationCount);
+                } catch (Exception e) {
+                    LOGGER.warn("Renderer: PNG generation failed — skipping critic, proceeding to DETAILING", e);
+                    emit(state, "Renderer", "Render failed — skipping critic: " + e.getMessage());
+                    finalizeOps(state);
+                    transition(state, OrchestratorState.DETAILING);
+                    return;
+                }
+
+                // Single-iteration fast path: tesseract.iterate=false skips critic
+                boolean iterateEnabled =
+                        !"false".equalsIgnoreCase(System.getProperty("tesseract.iterate", "true"));
+                if (!iterateEnabled || MAX_ITERATIONS <= 1) {
+                    emit(state, "Renderer", "Iteration disabled — skipping critic.");
+                    finalizeOps(state);
+                    transition(state, OrchestratorState.DETAILING);
+                } else {
+                    transition(state, OrchestratorState.CRITIQUING_VISUAL);
+                }
+            }
+
+            // ---- Stage 5: Visual critique + patch loop --------------------------
+            case CRITIQUING_VISUAL -> {
+                int pass = state.iterationCount + 1;
+                emit(state, "VisualCritic", "Critiquing build (pass " + pass + "/" + MAX_ITERATIONS + ")…");
+                AgentProgressManager.updateLabel(state.playerId,
+                        "Visual critic pass " + pass + "/" + MAX_ITERATIONS + "…");
+
+                VisualCriticAgent.run(state, getGemini(),
+                    critique -> onServerThread(state, () -> {
+                        // Surface issues to the player
+                        for (String issue : critique.issues()) {
+                            emit(state, "VisualCritic", "Issue: " + issue);
+                        }
+                        writeDebugCritique(state, critique);
+
+                        boolean budgetExceeded = (System.currentTimeMillis() - state.iterationStartMs)
+                                > ITERATION_BUDGET_MS;
+                        boolean maxReached = (state.iterationCount + 1) >= MAX_ITERATIONS;
+                        boolean shouldExit = critique.satisfied() || maxReached || budgetExceeded;
+
+                        if (shouldExit) {
+                            if (critique.satisfied()) {
+                                emit(state, "VisualCritic", "Build looks coherent — finalizing.");
+                            } else if (budgetExceeded) {
+                                emit(state, "VisualCritic", "Iteration budget exceeded — proceeding.");
+                            } else {
+                                emit(state, "VisualCritic", "Max iterations reached — proceeding.");
+                            }
+                            finalizeOps(state);
+                            transition(state, OrchestratorState.DETAILING);
+                        } else {
+                            // Apply patches inline; PATCHING state is a named feedback waypoint
+                            com.rayyan.tesseract.blueprint.Blueprint patched =
+                                    BlueprintPatcher.apply(state.blueprint, critique.patch());
+                            if (patched == state.blueprint) {
+                                // Patch was a no-op — treat as satisfied
+                                emit(state, "VisualCritic", "Patch was no-op — treating as satisfied.");
+                                finalizeOps(state);
+                                transition(state, OrchestratorState.DETAILING);
+                            } else {
+                                state.blueprint = patched;
+                                state.iterationCount++;
+                                emit(state, "VisualCritic",
+                                        "Blueprint patched — recompiling (pass "
+                                        + (state.iterationCount + 1) + "/" + MAX_ITERATIONS + ")");
+                                transition(state, OrchestratorState.PATCHING);
+                            }
+                        }
+                    }),
+                    // Critic error — fail soft, proceed with current build
+                    err -> onServerThread(state, () -> {
+                        LOGGER.warn("VisualCritic failed: {} — proceeding with current blueprint", err);
+                        emit(state, "VisualCritic", "Critic error — proceeding: " + err);
+                        finalizeOps(state);
+                        transition(state, OrchestratorState.DETAILING);
+                    }));
+            }
+
+            // ---- Stage 6: Patching (named state for player feedback) ------------
+            case PATCHING -> {
+                emit(state, "Orchestrator", "→ COMPILING (patched blueprint)");
+                transition(state, OrchestratorState.COMPILING);
+            }
+
+            // ---- Stage 7: Detail decoration (stub — DetailAgent wired in Step 8) -
+            case DETAILING -> {
+                emit(state, "Orchestrator", "→ DETAILING");
+                AgentProgressManager.updateLabel(state.playerId, "Decoration pass…");
+                // DetailAgent will be wired here in Step 8.
+                // For now: ensure completedOps is populated and transition to PLACING.
+                if (state.completedOps.isEmpty() && state.compiledBlueprint != null) {
+                    finalizeOps(state);
+                }
+                transition(state, OrchestratorState.PLACING);
+            }
+
+            // ---- Stage 8: Placement --------------------------------------------
             case PLACING -> {
                 if (state.completedOps.isEmpty()) {
                     emit(state, "Orchestrator", "No ops to place — blueprint produced zero blocks.");
                     transition(state, OrchestratorState.COMPLETE);
                     return;
                 }
-                emit(state, "Orchestrator", "→ PLACING (" + state.completedOps.size() + " blocks)");
+                emit(state, "Orchestrator",
+                        "→ PLACING (" + state.completedOps.size() + " blocks)");
 
                 if (state.isWebBuild) {
                     emit(state, "Placement", "Web build: collected "
@@ -190,8 +329,11 @@ public final class Orchestrator {
                         transition(state, OrchestratorState.COMPLETE);
                     }));
             }
+
+            // ---- Terminal states ------------------------------------------------
             case COMPLETE -> {
-                emit(state, "Build", "Complete — " + state.completedOps.size() + " blocks.");
+                emit(state, "Build", "Complete — " + state.completedOps.size() + " blocks, "
+                        + state.iterationCount + " critic pass(es).");
                 AgentProgressManager.stop(state.playerId);
                 BuildJobManager.finish(state.playerId);
                 activeBuilds.remove(state.playerId);
@@ -200,7 +342,13 @@ public final class Orchestrator {
                 }
             }
             case FAILED -> { /* failBuild() handles cleanup */ }
-            case IDLE    -> { /* start state */ }
+            case IDLE   -> { /* start state */ }
+
+            // ---- Dead legacy states -------------------------------------------
+            case GENERATING -> throw new UnsupportedOperationException(
+                    "GENERATING: removed in Refactor 2 Step 4.");
+            case CRITIQUING -> throw new UnsupportedOperationException(
+                    "CRITIQUING: removed in Refactor 2 Step 4.");
         }
     }
 
@@ -341,6 +489,47 @@ public final class Orchestrator {
             gemini = GeminiClient.fromEnv();
         }
         return gemini;
+    }
+
+    /**
+     * Copies the compiled blueprint ops into {@code state.completedOps} so that
+     * downstream stages (DETAILING, PLACING) always see a populated list.
+     */
+    private static void finalizeOps(BuildState state) {
+        if (state.compiledBlueprint != null) {
+            state.completedOps = new ArrayList<>(state.compiledBlueprint.ops());
+        }
+    }
+
+    /**
+     * If debug mode is active, writes {@code iterN_blueprint.json} alongside the
+     * existing debug output directory used by IsoRenderer.
+     *
+     * @see IsoRenderer#DEBUG_PROP
+     */
+    private void writeDebugBlueprint(BuildState state) {
+        if (!IsoRenderer.isDebugEnabled()) return;
+        try {
+            java.nio.file.Path dir  = IsoRenderer.debugDir();
+            java.nio.file.Path file = dir.resolve("iter" + state.iterationCount + "_blueprint.json");
+            java.nio.file.Files.writeString(file, new Gson().toJson(state.blueprint));
+        } catch (Exception e) {
+            LOGGER.warn("Failed to write debug blueprint: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * If debug mode is active, writes {@code iterN_critique.json}.
+     */
+    private void writeDebugCritique(BuildState state, Critique critique) {
+        if (!IsoRenderer.isDebugEnabled()) return;
+        try {
+            java.nio.file.Path dir  = IsoRenderer.debugDir();
+            java.nio.file.Path file = dir.resolve("iter" + state.iterationCount + "_critique.json");
+            java.nio.file.Files.writeString(file, new Gson().toJson(critique));
+        } catch (Exception e) {
+            LOGGER.warn("Failed to write debug critique: {}", e.getMessage());
+        }
     }
 
     /** Serialises the completed build as a { meta, ops } JSON string for the web dashboard. */

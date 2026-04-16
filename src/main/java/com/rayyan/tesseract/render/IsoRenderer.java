@@ -28,6 +28,12 @@ import java.util.List;
  */
 public final class IsoRenderer {
 
+    /** System property that enables debug artifact dumps. */
+    public static final String DEBUG_PROP = "tesseract.debug.renders";
+
+    /** Default debug output directory (relative to the working directory). */
+    private static final String DEBUG_DIR = "run/tesseract_debug";
+
     // Per-face brightness multipliers
     private static final float TOP_BRIGHT   = 1.00f;
     private static final float LEFT_BRIGHT  = 0.82f;
@@ -62,22 +68,40 @@ public final class IsoRenderer {
     }
 
     /**
-     * Writes a debug copy of the rendered PNG to {@code run/tesseract_debug/}.
-     * Silent no-op if the system property {@code tesseract.debug.renders} is unset
-     * or the directory does not exist.
+     * Returns {@code true} when the {@value #DEBUG_PROP} system property is set
+     * (to any value). Checked before writing any debug artifacts.
+     */
+    public static boolean isDebugEnabled() {
+        return System.getProperty(DEBUG_PROP) != null;
+    }
+
+    /**
+     * Returns the debug output directory path, creating it if necessary.
+     * Always returns a valid {@link java.nio.file.Path} (the directory may not yet exist).
+     */
+    public static java.nio.file.Path debugDir() {
+        java.nio.file.Path dir = java.nio.file.Paths.get(DEBUG_DIR);
+        try {
+            java.nio.file.Files.createDirectories(dir);
+        } catch (IOException ignored) {}
+        return dir;
+    }
+
+    /**
+     * Writes a debug copy of the rendered PNG to {@value #DEBUG_DIR}.
+     * Silent no-op if the {@value #DEBUG_PROP} system property is unset.
      *
      * @param png     PNG bytes from {@link #renderPng}
      * @param buildId any string identifier (e.g. player UUID)
      * @param iter    iteration index
      */
     public static void writeDebugCopy(byte[] png, String buildId, int iter) {
-        if (System.getProperty("tesseract.debug.renders") == null) return;
+        if (!isDebugEnabled()) return;
         try {
-            File dir = new File("run/tesseract_debug");
-            if (!dir.exists() && !dir.mkdirs()) return;
+            java.nio.file.Path dir = debugDir();
             String safe = buildId.replaceAll("[^a-zA-Z0-9_\\-]", "_");
-            File out = new File(dir, safe + "_iter" + iter + ".png");
-            try (java.io.FileOutputStream fos = new java.io.FileOutputStream(out)) {
+            java.nio.file.Path out = dir.resolve(safe + "_iter" + iter + ".png");
+            try (java.io.FileOutputStream fos = new java.io.FileOutputStream(out.toFile())) {
                 fos.write(png);
             }
         } catch (IOException ignored) {}
