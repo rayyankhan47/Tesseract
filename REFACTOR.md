@@ -132,7 +132,7 @@ Converts a raw natural language prompt into a structured spec. The only job of t
 
 ### 4.1 — Define the output schema and prompt
 
-- [ ] Output schema (the exact JSON this agent must return):
+- [x] Output schema (the exact JSON this agent must return):
   ```json
   {
     "style": "gothic",
@@ -144,8 +144,8 @@ Converts a raw natural language prompt into a structured spec. The only job of t
     "features": ["twin_towers", "central_arch", "crenellations", "torches"]
   }
   ```
-- [ ] System prompt instructs the model: you are an architectural interpreter for a Minecraft builder; output only the JSON object above, no prose, no markdown fences; be specific about features and materials; use only Minecraft block name fragments (not full IDs) for materials
-- [ ] If a reference image is attached, the system prompt adds: "A reference image is attached. Use it to inform the style, materials, and features fields."
+- [x] System prompt instructs the model: you are an architectural interpreter for a Minecraft builder; output only the JSON object above, no prose, no markdown fences; be specific about features and materials; use only Minecraft block name fragments (not full IDs) for materials
+- [x] If a reference image is attached, the system prompt adds: "A reference image is attached. Use it to inform the style, materials, and features fields."
 
 ### 4.2 — Create `InterpretationAgent.java`
 
