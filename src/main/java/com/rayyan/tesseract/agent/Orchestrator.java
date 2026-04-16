@@ -255,6 +255,22 @@ public final class Orchestrator {
         }
     }
 
+    /**
+     * Discards all active build state — called on server start so stale locks
+     * from a previous world load (within the same game session) do not block new builds.
+     * Any pending web build futures are completed exceptionally.
+     */
+    public void reset() {
+        for (BuildState state : activeBuilds.values()) {
+            AgentProgressManager.stop(state.playerId);
+            if (state.webBuildFuture != null) {
+                state.webBuildFuture.completeExceptionally(
+                        new RuntimeException("Server restarted."));
+            }
+        }
+        activeBuilds.clear();
+    }
+
     public void cancelBuild(UUID playerId) {
         BuildState state = activeBuilds.get(playerId);
         if (state == null) return;

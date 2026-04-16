@@ -26,6 +26,11 @@ public final class BuildQueueManager {
 
 	private BuildQueueManager() {}
 
+	/** Clears all active placement jobs — called on server start to discard stale cross-world state. */
+	public static void clear() {
+		ACTIVE_JOBS.clear();
+	}
+
 	public static boolean startBuild(ServerPlayerEntity player, Selection selection, BuildPlan plan) {
 		if (player == null || selection == null || plan == null || plan.ops == null) {
 			return false;

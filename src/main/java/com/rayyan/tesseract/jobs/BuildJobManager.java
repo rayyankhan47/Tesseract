@@ -30,6 +30,11 @@ public final class BuildJobManager {
 		ACTIVE_JOBS.remove(playerId);
 	}
 
+	/** Clears all active job locks — called on server start to discard stale cross-world state. */
+	public static void clear() {
+		ACTIVE_JOBS.clear();
+	}
+
 	public static void tick() {
 		long now = System.currentTimeMillis();
 		for (Map.Entry<UUID, Long> entry : ACTIVE_JOBS.entrySet()) {

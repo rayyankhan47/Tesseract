@@ -4,6 +4,7 @@ import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.command.v1.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.event.player.AttackBlockCallback;
 import net.fabricmc.fabric.api.event.player.UseBlockCallback;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.network.PacketByteBuf;
@@ -64,6 +65,15 @@ public class TesseractMod implements ModInitializer {
 
 		LOGGER.info("Tesseract initialized.");
 		startEmbeddedHttpServer();
+
+		// Clear all active build state on each new world load so stale locks from a
+		// previous session (or failed build) don't block the player from starting a new build.
+		ServerLifecycleEvents.SERVER_STARTED.register(server -> {
+			BuildJobManager.clear();
+			BuildQueueManager.clear();
+			Orchestrator.getInstance().reset();
+			LOGGER.info("Tesseract: cleared build state for new world.");
+		});
 
 		CommandRegistrationCallback.EVENT.register((dispatcher, dedicated) -> {
 			dispatcher.register(literal("tesseract")
