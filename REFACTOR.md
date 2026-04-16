@@ -167,7 +167,7 @@ Takes the spec from the InterpretationAgent and decomposes it into an ordered li
 
 ### 5.1 — Define the output schema and prompt
 
-- [ ] Output schema:
+- [x] Output schema:
   ```json
   [
     { "id": "comp_1", "name": "foundation", "description": "flat stone base, full footprint, 1 block tall", "build_after": [] },
@@ -176,8 +176,8 @@ Takes the spec from the InterpretationAgent and decomposes it into an ordered li
     { "id": "comp_4", "name": "central_arch", "description": "6 blocks wide, 10 blocks tall pointed arch in cobblestone, spans between towers", "build_after": ["comp_2", "comp_3"] }
   ]
   ```
-- [ ] System prompt instructs the model: decompose the spec into the minimum set of named components needed; order them so dependencies are always built before dependents; write descriptions that are precise enough for a block-level generator to work from; total block count across all components should not exceed the `maxBlocks` limit (pass this in context)
-- [ ] Pass the full `BuildSpec` JSON as part of the user prompt, plus the bounding box dimensions from `state.buildSelection`
+- [x] System prompt instructs the model: decompose the spec into the minimum set of named components needed; order them so dependencies are always built before dependents; write descriptions that are precise enough for a block-level generator to work from; total block count across all components should not exceed the `maxBlocks` limit (pass this in context)
+- [x] Pass the full `BuildSpec` JSON as part of the user prompt, plus the bounding box dimensions from `state.buildSelection`
 
 ### 5.2 — Create `PlanningAgent.java`
 
