@@ -26,14 +26,18 @@ public final class CriticAgent {
     /**
      * Validates the generated block operations for one component.
      *
-     * @param ops       block operations produced by GenerationAgent
-     * @param component the component plan (provides bounding box and id)
-     * @param palette   allowed block IDs (full {@code minecraft:} form)
+     * @param ops            block operations produced by GenerationAgent (may be mutated by Check 5)
+     * @param component      the component plan (provides bounding box and id)
+     * @param palette        allowed block IDs (full {@code minecraft:} form)
+     * @param totalMaxBlocks total budget for the whole build (used to derive per-component budget)
+     * @param componentCount total number of components (used to derive per-component budget)
      * @return a {@link CriticResult} — passed or failed with a human-readable reason
      */
     public static CriticResult validate(List<GumloopPayload.BlockOp> ops,
                                         ComponentPlan component,
-                                        List<String> palette) {
+                                        List<String> palette,
+                                        int totalMaxBlocks,
+                                        int componentCount) {
         // Check 1 — null / empty
         if (ops == null || ops.isEmpty()) {
             return CriticResult.fail("component generated zero blocks");
@@ -70,8 +74,29 @@ public final class CriticAgent {
         CriticResult floatCheck = checkFloating(ops, component);
         if (!floatCheck.passed()) return floatCheck;
 
-        LOGGER.debug("CriticAgent: component '{}' passed checks 1–4 ({} blocks).", component.name, ops.size());
+        // Check 5 — budget enforcement (non-fatal: truncate ops, log warning)
+        if (componentCount > 0 && totalMaxBlocks > 0) {
+            int budget = Math.max(1, totalMaxBlocks / componentCount);
+            if (ops.size() > budget) {
+                int dropped = ops.size() - budget;
+                LOGGER.warn("CriticAgent: component '{}' exceeded budget ({} > {}). Truncating {} blocks.",
+                        component.name, ops.size(), budget, dropped);
+                // ops is an ArrayList from GenerationAgent.parseOps — safe to mutate via subList
+                ops.subList(budget, ops.size()).clear();
+            }
+        }
+
+        LOGGER.debug("CriticAgent: component '{}' passed all checks ({} blocks).", component.name, ops.size());
         return CriticResult.pass();
+    }
+
+    /**
+     * Convenience overload — skips budget check when total/count are unknown.
+     */
+    public static CriticResult validate(List<GumloopPayload.BlockOp> ops,
+                                        ComponentPlan component,
+                                        List<String> palette) {
+        return validate(ops, component, palette, 0, 0);
     }
 
     // -------------------------------------------------------------------------

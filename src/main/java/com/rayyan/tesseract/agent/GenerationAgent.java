@@ -204,7 +204,9 @@ public final class GenerationAgent {
                                     Runnable onCriticPass,
                                     BiConsumer<String, Boolean> onCriticFail) {
         List<String> palette = buildFullPalette(state);
-        CriticResult result = CriticAgent.validate(ops, component, palette);
+        int totalMaxBlocks = computeMaxBlocks(state, component);
+        int compCount = state.componentPlan != null ? state.componentPlan.size() : 1;
+        CriticResult result = CriticAgent.validate(ops, component, palette, totalMaxBlocks, compCount);
 
         if (result.passed()) {
             LOGGER.info("GenerationAgent: component '{}' passed critic ({} blocks).",
@@ -227,6 +229,14 @@ public final class GenerationAgent {
     // -------------------------------------------------------------------------
     // Palette helpers
     // -------------------------------------------------------------------------
+
+    private static int computeMaxBlocks(BuildState state, ComponentPlan component) {
+        if (state.buildSelection != null && state.buildSelection.isComplete()) {
+            net.minecraft.util.math.BlockPos s = state.buildSelection.getSize();
+            if (s != null) return s.getX() * s.getY() * s.getZ();
+        }
+        return component.sizeX * component.sizeY * component.sizeZ;
+    }
 
     static List<String> buildFullPalette(BuildState state) {
         // The canonical safe palette — always allowed.

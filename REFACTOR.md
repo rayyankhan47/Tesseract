@@ -33,7 +33,7 @@ The input and output of the system are unchanged: player types a prompt, blocks 
 - [x] **Step 4** — Build InterpretationAgent
 - [x] **Step 5** — Build PlanningAgent
 - [x] **Step 6** — Build GenerationAgent
-- [ ] **Step 7** — Build CriticAgent
+- [x] **Step 7** — Build CriticAgent
 - [ ] **Step 8** — Extract PlacementAgent
 - [ ] **Step 9** — Wire everything end-to-end and test
 - [ ] **Step 10** — Add image reference support (multimodal)
@@ -249,7 +249,7 @@ Create `src/main/java/com/rayyan/tesseract/agent/CriticAgent.java`:
 
 ### 7.3 — Max block count check
 
-- [ ] Check 5 (budget): if `ops.size()` exceeds the per-component budget (total `maxBlocks` divided by number of components), return a warning (non-fatal) in the event log but do not fail — just truncate `ops` to the budget and log which blocks were dropped
+- [x] Check 5 (budget): if `ops.size()` exceeds the per-component budget (total `maxBlocks` divided by number of components), return a warning (non-fatal) in the event log but do not fail — just truncate `ops` to the budget and log which blocks were dropped
 
 ---
 
