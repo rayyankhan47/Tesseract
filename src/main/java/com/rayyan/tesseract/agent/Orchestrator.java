@@ -291,16 +291,23 @@ public final class Orchestrator {
                 transition(state, OrchestratorState.COMPILING);
             }
 
-            // ---- Stage 7: Detail decoration (stub — DetailAgent wired in Step 8) -
+            // ---- Stage 7: Detail decoration ---------------------------------
             case DETAILING -> {
                 emit(state, "Orchestrator", "→ DETAILING");
                 AgentProgressManager.updateLabel(state.playerId, "Decoration pass…");
-                // DetailAgent will be wired here in Step 8.
-                // For now: ensure completedOps is populated and transition to PLACING.
-                if (state.completedOps.isEmpty() && state.compiledBlueprint != null) {
-                    finalizeOps(state);
-                }
-                transition(state, OrchestratorState.PLACING);
+                DetailAgent.run(state, getGemini(),
+                    () -> onServerThread(state, () -> {
+                        emit(state, "DetailAgent",
+                                state.completedOps.size() + " total ops after decoration.");
+                        transition(state, OrchestratorState.PLACING);
+                    }),
+                    err -> onServerThread(state, () -> {
+                        // Decoration failure is non-fatal — proceed with structural ops only
+                        LOGGER.warn("DetailAgent failed: {} — proceeding without decoration", err);
+                        emit(state, "DetailAgent", "Decoration skipped: " + err);
+                        if (state.completedOps.isEmpty()) finalizeOps(state);
+                        transition(state, OrchestratorState.PLACING);
+                    }));
             }
 
             // ---- Stage 8: Placement --------------------------------------------

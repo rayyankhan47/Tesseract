@@ -65,7 +65,7 @@ PlacementAgent             → places block-by-block via BuildQueueManager
 - [x] **Step 5** — Implement the isometric block renderer
 - [x] **Step 6** — Build the VisualCriticAgent and patch applier
 - [x] **Step 7** — Wire the iteration loop into the Orchestrator
-- [ ] **Step 8** — Build the DetailAgent
+- [x] **Step 8** — Build the DetailAgent
 - [ ] **Step 9** — Update the Orchestrator state machine end-to-end
 - [ ] **Step 10** — Testing, prompt tuning, and end-to-end smoke tests
 
