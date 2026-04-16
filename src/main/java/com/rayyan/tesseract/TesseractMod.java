@@ -29,6 +29,15 @@ import net.minecraft.item.Item;
 import net.minecraft.item.Items;
 import com.mojang.brigadier.arguments.StringArgumentType;
 
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+import com.sun.net.httpserver.HttpExchange;
+import com.sun.net.httpserver.HttpServer;
+
+import java.io.IOException;
+import java.net.InetSocketAddress;
+import java.nio.charset.StandardCharsets;
+import java.util.Base64;
 import java.util.UUID;
 
 import static net.minecraft.server.command.CommandManager.argument;
@@ -53,6 +62,7 @@ public class TesseractMod implements ModInitializer {
 		// Proceed with mild caution.
 
 		LOGGER.info("Tesseract initialized.");
+		startEmbeddedHttpServer();
 
 		CommandRegistrationCallback.EVENT.register((dispatcher, dedicated) -> {
 			dispatcher.register(literal("tesseract")
@@ -159,6 +169,77 @@ public class TesseractMod implements ModInitializer {
 			}
 			return ActionResult.PASS;
 		});
+	}
+
+	// -------------------------------------------------------------------------
+	// Embedded HTTP server — port 4891 (web dashboard → mod bridge)
+	// -------------------------------------------------------------------------
+
+	/**
+	 * Starts a minimal HTTP server on port 4891.
+	 *
+	 * POST /build  — body: {"prompt":"...","imageBase64":"...","imageMimeType":"..."}
+	 *              — response: GumloopPayload.Response JSON for plan_server.py to store
+	 *
+	 * Port 4890 is already used by tools/plan_server.py and must not be disturbed.
+	 */
+	private static void startEmbeddedHttpServer() {
+		try {
+			HttpServer server = HttpServer.create(new InetSocketAddress(4891), 0);
+			server.createContext("/build", exchange -> {
+				if (!"POST".equalsIgnoreCase(exchange.getRequestMethod())) {
+					sendHttpResponse(exchange, 405, "{\"error\":\"Method not allowed\"}");
+					return;
+				}
+				try {
+					byte[] bodyBytes = exchange.getRequestBody().readAllBytes();
+					JsonObject req = JsonParser.parseString(new String(bodyBytes, StandardCharsets.UTF_8))
+							.getAsJsonObject();
+
+					String prompt = req.has("prompt") ? req.get("prompt").getAsString() : null;
+					if (prompt == null || prompt.isBlank()) {
+						sendHttpResponse(exchange, 400, "{\"error\":\"Missing prompt\"}");
+						return;
+					}
+
+					byte[] imageBytes = null;
+					String imageMimeType = null;
+					if (req.has("imageBase64") && !req.get("imageBase64").isJsonNull()) {
+						imageBytes = Base64.getDecoder().decode(req.get("imageBase64").getAsString());
+						imageMimeType = req.has("imageMimeType")
+								? req.get("imageMimeType").getAsString()
+								: "image/png";
+					}
+
+					String result = Orchestrator.getInstance().runWebBuild(prompt, imageBytes, imageMimeType);
+					sendHttpResponse(exchange, 200, result);
+
+				} catch (IllegalStateException e) {
+					LOGGER.warn("Web build rejected: {}", e.getMessage());
+					sendHttpResponse(exchange, 503, "{\"error\":\"" + e.getMessage() + "\"}");
+				} catch (Exception e) {
+					LOGGER.error("Web build failed", e);
+					sendHttpResponse(exchange, 500, "{\"error\":\"" + e.getMessage() + "\"}");
+				}
+			});
+			server.setExecutor(java.util.concurrent.Executors.newCachedThreadPool());
+			server.start();
+			LOGGER.info("Tesseract HTTP server listening on port 4891.");
+		} catch (IOException e) {
+			LOGGER.error("Failed to start embedded HTTP server on port 4891", e);
+		}
+	}
+
+	private static void sendHttpResponse(HttpExchange exchange, int status, String body) {
+		try {
+			byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
+			exchange.getResponseHeaders().add("Content-Type", "application/json");
+			exchange.sendResponseHeaders(status, bytes.length);
+			exchange.getResponseBody().write(bytes);
+			exchange.getResponseBody().close();
+		} catch (IOException e) {
+			LOGGER.error("Failed to send HTTP response", e);
+		}
 	}
 
 	private static void sendMessage(ServerCommandSource source, String message) {

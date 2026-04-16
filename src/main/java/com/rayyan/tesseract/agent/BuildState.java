@@ -54,6 +54,15 @@ public final class BuildState {
     // ---- Event log (CopyOnWriteArrayList — safe to read off server thread) ----
     List<BuildEvent> eventLog;
 
+    // ---- Web build support ----
+    /** True for builds triggered via the embedded HTTP server (no real player / world). */
+    boolean isWebBuild;
+    /**
+     * For web builds: completed with the serialised plan JSON once the pipeline
+     * reaches COMPLETE, or completed exceptionally on FAILED.
+     */
+    java.util.concurrent.CompletableFuture<String> webBuildFuture;
+
     BuildState(UUID playerId, ServerPlayerEntity player, String prompt,
                byte[] imageBytes, String imageMimeType,
                Selection selection) {

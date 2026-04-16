@@ -1,15 +1,20 @@
 package com.rayyan.tesseract.agent;
 
+import com.google.gson.Gson;
 import com.rayyan.tesseract.api.GeminiClient;
+import com.rayyan.tesseract.gumloop.GumloopPayload;
 import com.rayyan.tesseract.jobs.BuildJobManager;
 import com.rayyan.tesseract.selection.Selection;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.text.Text;
+import net.minecraft.util.math.BlockPos;
 
+import java.util.ArrayList;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -18,23 +23,34 @@ import org.slf4j.LoggerFactory;
  * Owns the five-stage build pipeline state machine.
  *
  * All state mutations happen on the Minecraft server thread. Async agent
- * completions call back via {@code player.getServer().execute(() -> ...)},
- * exactly matching the existing pattern in PlanPasteClient.
+ * completions call back via {@link #onServerThread}, which uses the player's
+ * server reference for in-game builds and {@link #currentServer} for web builds.
  *
- * Usage:
+ * Usage (in-game):
  *   Orchestrator.getInstance().run(player, buildSelection, contextSelection, prompt, null, null);
+ *
+ * Usage (web):
+ *   String planJson = Orchestrator.getInstance().runWebBuild(prompt, null, null);
  */
 public final class Orchestrator {
 
     private static final Orchestrator INSTANCE = new Orchestrator();
     private static final Logger LOGGER = LoggerFactory.getLogger("tesseract.orchestrator");
-    private static final long BUILD_TIMEOUT_MS = 5 * 60 * 1000L; // 5 minutes
+    private static final long BUILD_TIMEOUT_MS = 5 * 60 * 1000L;
+    private static final UUID WEB_BUILD_ID = UUID.nameUUIDFromBytes("web".getBytes());
+    private static final Gson GSON = new Gson();
 
-    /** Active builds keyed by player UUID. */
+    /** Active builds keyed by player UUID (or WEB_BUILD_ID for web builds). */
     private final Map<UUID, BuildState> activeBuilds = new ConcurrentHashMap<>();
 
-    /** Lazily initialised on first run() call so missing GEMINI_API_KEY doesn't crash startup. */
+    /** Lazily initialised; missing GEMINI_API_KEY must not crash startup. */
     private GeminiClient gemini;
+
+    /**
+     * Set each tick by {@link #tick(MinecraftServer)} — used to re-enter the server
+     * thread for web builds that have no player reference.
+     */
+    private volatile MinecraftServer currentServer;
 
     private Orchestrator() {}
 
@@ -43,15 +59,15 @@ public final class Orchestrator {
     }
 
     // -------------------------------------------------------------------------
-    // Public entry point
+    // Public entry points
     // -------------------------------------------------------------------------
 
     /**
-     * Starts a new build pipeline for the given player.
+     * Starts a new in-game build pipeline for the given player.
      *
-     * @param contextSelection nullable — scanned context region (passed to agents for reference)
-     * @param imageBytes       nullable — reference image for multimodal interpretation
-     * @param imageMimeType    nullable — MIME type of imageBytes (e.g. "image/png")
+     * @param contextSelection nullable — scanned context region
+     * @param imageBytes       nullable — reference image bytes
+     * @param imageMimeType    nullable — MIME type of imageBytes
      */
     public void run(ServerPlayerEntity player,
                     Selection buildSelection,
@@ -68,14 +84,44 @@ public final class Orchestrator {
         transition(state, OrchestratorState.INTERPRETING);
     }
 
+    /**
+     * Starts a web-triggered build (no real player or world).
+     * Blocks until the pipeline completes (or times out after 120 s).
+     *
+     * @return serialised plan JSON {@code {"meta":{...},"ops":[...]}} ready for plan_server.py
+     */
+    public String runWebBuild(String prompt, byte[] imageBytes, String imageMimeType)
+            throws Exception {
+        if (currentServer == null) {
+            throw new IllegalStateException("Minecraft server not ready yet.");
+        }
+        if (activeBuilds.containsKey(WEB_BUILD_ID)) {
+            throw new IllegalStateException("A web build is already in progress. Try again shortly.");
+        }
+
+        Selection syntheticSelection = new Selection();
+        syntheticSelection.setCornerA(BlockPos.ORIGIN);
+        syntheticSelection.setCornerB(new BlockPos(15, 11, 15)); // 16×12×16
+
+        java.util.concurrent.CompletableFuture<String> future = new java.util.concurrent.CompletableFuture<>();
+        BuildState state = new BuildState(WEB_BUILD_ID, null, prompt, imageBytes, imageMimeType, syntheticSelection);
+        state.isWebBuild = true;
+        state.webBuildFuture = future;
+        activeBuilds.put(WEB_BUILD_ID, state);
+        BuildJobManager.start(WEB_BUILD_ID);
+
+        currentServer.execute(() -> {
+            emit(state, "Orchestrator", "Web build starting: \"" + prompt + "\"");
+            transition(state, OrchestratorState.INTERPRETING);
+        });
+
+        return future.get(120, TimeUnit.SECONDS);
+    }
+
     // -------------------------------------------------------------------------
     // State machine
     // -------------------------------------------------------------------------
 
-    /**
-     * Validates the transition, advances state, emits an event, then dispatches
-     * to the correct agent. Always called on the Minecraft server thread.
-     */
     void transition(BuildState state, OrchestratorState next) {
         OrchestratorState.assertTransition(state.state, next);
         state.state = next;
@@ -85,7 +131,7 @@ public final class Orchestrator {
                 emit(state, "Orchestrator", "→ INTERPRETING");
                 AgentProgressManager.updateLabel(state.playerId, "Interpreting prompt…");
                 InterpretationAgent.run(state, getGemini(),
-                    () -> state.player.getServer().execute(() -> {
+                    () -> onServerThread(state, () -> {
                         emit(state, "InterpretationAgent",
                                 "Interpreted: " + state.spec.type + " (" + state.spec.style + "), "
                                 + state.spec.width + "×" + state.spec.height + "×" + state.spec.depth
@@ -93,13 +139,13 @@ public final class Orchestrator {
                                         ? ", features: " + String.join(", ", state.spec.features) : ""));
                         transition(state, OrchestratorState.PLANNING);
                     }),
-                    err -> state.player.getServer().execute(() -> failBuild(state, err)));
+                    err -> onServerThread(state, () -> failBuild(state, err)));
             }
             case PLANNING -> {
                 emit(state, "Orchestrator", "→ PLANNING");
                 AgentProgressManager.updateLabel(state.playerId, "Planning structure…");
                 PlanningAgent.run(state, getGemini(),
-                    () -> state.player.getServer().execute(() -> {
+                    () -> onServerThread(state, () -> {
                         emit(state, "PlanningAgent",
                                 "Plan: " + state.componentPlan.stream()
                                         .map(c -> c.name).reduce((a, b) -> a + " → " + b).orElse("(empty)")
@@ -107,7 +153,7 @@ public final class Orchestrator {
                         state.currentComponentIndex = 0;
                         transition(state, OrchestratorState.GENERATING);
                     }),
-                    err -> state.player.getServer().execute(() -> failBuild(state, err)));
+                    err -> onServerThread(state, () -> failBuild(state, err)));
             }
             case GENERATING -> {
                 ComponentPlan comp = currentComponent(state);
@@ -123,23 +169,17 @@ public final class Orchestrator {
                 int retryAttempt = comp != null ? comp.retryCount : 0;
                 String priorReason = comp != null ? comp.lastFailureReason : null;
                 GenerationAgent.runComponent(state, getGemini(), retryAttempt, priorReason,
-                    () -> state.player.getServer().execute(() ->
-                            transition(state, OrchestratorState.CRITIQUING)),
-                    (reason, shouldRetry) -> state.player.getServer().execute(() -> {
+                    () -> onServerThread(state, () -> transition(state, OrchestratorState.CRITIQUING)),
+                    (reason, shouldRetry) -> onServerThread(state, () -> {
                         emit(state, "Critic", "Component failed: " + reason);
                         if (shouldRetry) {
                             transition(state, OrchestratorState.GENERATING);
                         } else {
-                            // Max retries reached — component already added to failedComponentIds.
-                            // Advance to the next component (or COMPLETE if all done).
                             advanceOrComplete(state);
                         }
                     }));
             }
             case CRITIQUING -> {
-                // CriticAgent validation has already passed inside GenerationAgent before
-                // onCriticPass was called. This state is a logical marker — transition
-                // immediately to PLACING.
                 ComponentPlan approved = currentComponent(state);
                 emit(state, "Critic", "Component '" + (approved != null ? approved.name : "?") + "' passed"
                         + (approved != null && approved.pendingOps != null
@@ -153,16 +193,25 @@ public final class Orchestrator {
                     return;
                 }
                 emit(state, "Orchestrator", "→ PLACING component '" + comp.name + "' (" + comp.pendingOps.size() + " blocks)");
+
+                if (state.isWebBuild) {
+                    // Web builds have no world — accumulate ops and advance immediately.
+                    state.completedOps.addAll(comp.pendingOps);
+                    emit(state, "Placement", "Collected component '" + comp.name
+                            + "' (" + comp.pendingOps.size() + " blocks) for web plan.");
+                    advanceOrComplete(state);
+                    return;
+                }
+
                 net.minecraft.server.world.ServerWorld world =
                         (net.minecraft.server.world.ServerWorld) state.player.getWorld();
                 PlacementAgent.placeComponent(state, world, comp.pendingOps, comp,
                     () -> {
-                        // Already on the server thread — BuildQueueManager.tick() runs there.
                         emit(state, "Placement", "Placed component '" + comp.name
                                 + "' (" + comp.pendingOps.size() + " blocks)");
                         advanceOrComplete(state);
                     },
-                    err -> state.player.getServer().execute(() -> failBuild(state, err)));
+                    err -> onServerThread(state, () -> failBuild(state, err)));
             }
             case COMPLETE -> {
                 int totalBlocks = state.completedOps.size();
@@ -173,19 +222,15 @@ public final class Orchestrator {
                 AgentProgressManager.stop(state.playerId);
                 BuildJobManager.finish(state.playerId);
                 activeBuilds.remove(state.playerId);
+                if (state.webBuildFuture != null) {
+                    state.webBuildFuture.complete(buildPlanJson(state));
+                }
             }
-            case FAILED -> {
-                // failBuild() handles cleanup; this case is unreachable via normal flow
-                // but included for switch exhaustiveness.
-            }
-            case IDLE -> { /* start state — no action */ }
+            case FAILED -> { /* failBuild() handles cleanup */ }
+            case IDLE    -> { /* start state */ }
         }
     }
 
-    /**
-     * Advances to the next component or transitions to COMPLETE when all components are done.
-     * Called by PlacementAgent after a successful component placement (Step 8).
-     */
     void advanceOrComplete(BuildState state) {
         state.currentComponentIndex++;
         if (state.componentPlan != null && state.currentComponentIndex < state.componentPlan.size()) {
@@ -201,6 +246,9 @@ public final class Orchestrator {
         AgentProgressManager.stop(state.playerId);
         BuildJobManager.finish(state.playerId);
         activeBuilds.remove(state.playerId);
+        if (state.webBuildFuture != null) {
+            state.webBuildFuture.completeExceptionally(new RuntimeException("Build failed: " + reason));
+        }
     }
 
     public void cancelBuild(UUID playerId) {
@@ -214,13 +262,9 @@ public final class Orchestrator {
     }
 
     // -------------------------------------------------------------------------
-    // Event forwarding (3.3)
+    // Event forwarding
     // -------------------------------------------------------------------------
 
-    /**
-     * Appends an event to the log and, if the player is still online, sends it
-     * to their chat as {@code [agentName] message}.
-     */
     void emit(BuildState state, String agentName, String message) {
         BuildEvent event = BuildEvent.of(agentName, message);
         state.eventLog.add(event);
@@ -232,11 +276,12 @@ public final class Orchestrator {
     }
 
     // -------------------------------------------------------------------------
-    // Tick — clean up builds stuck > BUILD_TIMEOUT_MS
+    // Tick — save server reference, clean up timed-out builds
     // -------------------------------------------------------------------------
 
     public void tick(MinecraftServer server) {
         if (server == null) return;
+        this.currentServer = server;
         AgentProgressManager.tick(server);
 
         long now = System.currentTimeMillis();
@@ -249,6 +294,10 @@ public final class Orchestrator {
                         entry.getKey(), state.state);
                 BuildJobManager.finish(entry.getKey());
                 AgentProgressManager.stop(entry.getKey());
+                if (state.webBuildFuture != null) {
+                    state.webBuildFuture.completeExceptionally(
+                            new RuntimeException("Build timed out in state " + state.state));
+                }
                 return true;
             }
             return false;
@@ -258,6 +307,21 @@ public final class Orchestrator {
     // -------------------------------------------------------------------------
     // Helpers
     // -------------------------------------------------------------------------
+
+    /**
+     * Queues {@code action} on the Minecraft server thread.
+     * Uses the player's server for in-game builds, {@link #currentServer} for web builds.
+     */
+    private void onServerThread(BuildState state, Runnable action) {
+        MinecraftServer srv = (state.player != null && state.player.getServer() != null)
+                ? state.player.getServer()
+                : currentServer;
+        if (srv != null) {
+            srv.execute(action);
+        } else {
+            action.run(); // last-resort fallback — should not occur in normal usage
+        }
+    }
 
     private GeminiClient getGemini() {
         if (gemini == null) {
@@ -270,5 +334,18 @@ public final class Orchestrator {
         if (state.componentPlan == null) return null;
         if (state.currentComponentIndex < 0 || state.currentComponentIndex >= state.componentPlan.size()) return null;
         return state.componentPlan.get(state.currentComponentIndex);
+    }
+
+    /** Serialises the completed build as a GumloopPayload.Response-compatible JSON string. */
+    private static String buildPlanJson(BuildState state) {
+        GumloopPayload.Response response = new GumloopPayload.Response();
+        response.ops = new ArrayList<>(state.completedOps);
+        response.meta = new GumloopPayload.Meta();
+        response.meta.blockCount = state.completedOps.size();
+        response.meta.theme = state.spec != null ? state.spec.type : "web_build";
+        if (!state.failedComponentIds.isEmpty()) {
+            response.meta.warnings = new ArrayList<>(state.failedComponentIds);
+        }
+        return GSON.toJson(response);
     }
 }

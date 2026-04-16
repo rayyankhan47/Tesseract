@@ -293,9 +293,9 @@ Connect the Orchestrator into the existing entry point, add the embedded HTTP se
 
 The web dashboard → `server.py` needs to reach the Java mod to trigger a build without an in-game player command. Add a minimal embedded HTTP server inside the mod on port 4890 (the same port the old plan store used, so `server.py` needs no URL change):
 
-- [ ] In `TesseractMod.onInitialize()`, start a `com.sun.net.httpserver.HttpServer` on port **4891** (available in JDK 17, no extra deps). Port 4890 is already taken by `tools/plan_server.py` (the plan store) and must not be disturbed.
-- [ ] Register handler `POST /build`: reads `{ "prompt", "imageBase64"?, "imageMimeType"? }` from the request body; creates a synthetic "web build" using a default 16×12×16 selection (no real player context); runs the Orchestrator pipeline; when complete, returns the raw plan JSON `{ "meta": {...}, "ops": [...] }` — `web/server.py` receives this, then posts it to `tools/plan_server.py` on port 4890 to get the shareable URL
-- [ ] The web build path does not require a logged-in player; `BuildJobManager` lock is keyed by a synthetic `UUID.nameUUIDFromBytes("web".getBytes())` to prevent concurrent web builds
+- [x] In `TesseractMod.onInitialize()`, start a `com.sun.net.httpserver.HttpServer` on port **4891** (available in JDK 17, no extra deps). Port 4890 is already taken by `tools/plan_server.py` (the plan store) and must not be disturbed.
+- [x] Register handler `POST /build`: reads `{ "prompt", "imageBase64"?, "imageMimeType"? }` from the request body; creates a synthetic "web build" using a default 16×12×16 selection (no real player context); runs the Orchestrator pipeline; when complete, returns the raw plan JSON `{ "meta": {...}, "ops": [...] }` — `web/server.py` receives this, then posts it to `tools/plan_server.py` on port 4890 to get the shareable URL
+- [x] The web build path does not require a logged-in player; `BuildJobManager` lock is keyed by a synthetic `UUID.nameUUIDFromBytes("web".getBytes())` to prevent concurrent web builds
 
 ### 9.3 — Register Orchestrator tick and verify the visible log output
 
