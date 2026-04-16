@@ -39,40 +39,37 @@ public final class PlacementAgent {
     // -------------------------------------------------------------------------
 
     /**
-     * Queues the approved ops for one component into the throttled placement loop.
+     * Queues ops into the throttled placement loop.
      *
-     * Coordinate translation: world pos = state.placementOrigin
-     *                                      + (component.originX, component.originY, component.originZ)
-     *                                      + (op.x, op.y, op.z)
+     * Coordinate translation: world pos = {@code origin} + (op.x, op.y, op.z)
      *
-     * @param state     shared build context (provides placementOrigin and completedOps)
-     * @param world     server world to place blocks in
-     * @param ops       approved ops from CriticAgent (component-relative coordinates)
-     * @param component the component being placed (provides origin offsets)
-     * @param onComplete called (on the server thread) after all blocks in this component are placed
-     * @param onError    called (on the server thread) with a human-readable reason if placement fails
+     * @param state      shared build context (provides completedOps for accumulation)
+     * @param world      server world to place blocks in
+     * @param ops        blueprint-local ops (origin-relative coordinates)
+     * @param origin     world-space base for the coordinate translation
+     * @param label      short label used in logs (e.g. "roof", "foundation")
+     * @param onComplete called (on the server thread) when all blocks are placed
+     * @param onError    called (on the server thread) with a reason if placement fails
      */
-    public static void placeComponent(BuildState state,
-                                       ServerWorld world,
-                                       List<BlockOp> ops,
-                                       ComponentPlan component,
-                                       Runnable onComplete,
-                                       Consumer<String> onError) {
+    public static void placeOps(BuildState state,
+                                 ServerWorld world,
+                                 List<BlockOp> ops,
+                                 BlockPos origin,
+                                 String label,
+                                 Runnable onComplete,
+                                 Consumer<String> onError) {
         if (ops == null || ops.isEmpty()) {
-            LOGGER.warn("PlacementAgent: no ops to place for component '{}'.", component.name);
+            LOGGER.warn("PlacementAgent: no ops to place for '{}'.", label);
             onComplete.run();
             return;
         }
 
-        BlockPos componentOrigin = state.placementOrigin
-                .add(component.originX, component.originY, component.originZ);
-
         // Validate chunk availability and block IDs before queuing.
         for (BlockOp op : ops) {
-            BlockPos worldPos = componentOrigin.add(op.x, op.y, op.z);
+            BlockPos worldPos = origin.add(op.x, op.y, op.z);
             if (!world.isChunkLoaded(worldPos)) {
-                onError.accept("chunk not loaded near " + worldPos.getX()
-                        + " " + worldPos.getY() + " " + worldPos.getZ());
+                onError.accept("chunk not loaded near "
+                        + worldPos.getX() + " " + worldPos.getY() + " " + worldPos.getZ());
                 return;
             }
             if (toBlockState(op.block) == null) {
@@ -85,24 +82,20 @@ public final class PlacementAgent {
         List<BlockOp> worldOps = new ArrayList<>(ops.size());
         for (BlockOp op : ops) {
             BlockOp w = new BlockOp();
-            w.x = componentOrigin.getX() + op.x;
-            w.y = componentOrigin.getY() + op.y;
-            w.z = componentOrigin.getZ() + op.z;
+            w.x = origin.getX() + op.x;
+            w.y = origin.getY() + op.y;
+            w.z = origin.getZ() + op.z;
             w.block = op.block;
             worldOps.add(w);
         }
 
-        // Wrap onComplete: first append to completedOps, then signal the Orchestrator.
         Runnable completionCallback = () -> {
             state.completedOps.addAll(worldOps);
-            LOGGER.info("PlacementAgent: component '{}' placed ({} blocks).", component.name, ops.size());
+            LOGGER.info("PlacementAgent: '{}' placed ({} blocks).", label, ops.size());
             onComplete.run();
         };
 
-        // Queue into BuildQueueManager at 20 blocks/tick.
-        // componentOrigin is the world-space base; ops are component-relative.
-        BuildQueueManager.startComponentBuild(
-                state.playerId, world, componentOrigin, ops, completionCallback);
+        BuildQueueManager.startComponentBuild(state.playerId, world, origin, ops, completionCallback);
     }
 
     // -------------------------------------------------------------------------

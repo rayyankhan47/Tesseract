@@ -29,4 +29,13 @@ public final class BuildSpec {
     List<String> features;
     /** The raw JSON string returned by the LLM — kept for logging and debugging. */
     String rawJson;
+
+    // Public accessors for cross-package access (e.g. PaletteUtils in blueprint package)
+    public List<String> getMaterials() { return materials; }
+    public List<String> getFeatures()  { return features; }
+    public String getStyle()           { return style; }
+    public String getType()            { return type; }
+    public int getWidth()              { return width; }
+    public int getHeight()             { return height; }
+    public int getDepth()              { return depth; }
 }

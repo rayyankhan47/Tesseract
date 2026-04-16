@@ -4,10 +4,11 @@ import com.google.gson.Gson;
 import com.rayyan.tesseract.api.GeminiClient;
 import com.rayyan.tesseract.paste.BuildPlan;
 import com.rayyan.tesseract.jobs.BuildJobManager;
+import com.rayyan.tesseract.jobs.BuildQueueManager;
 import com.rayyan.tesseract.selection.Selection;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.util.math.BlockPos;
 import net.minecraft.server.network.ServerPlayerEntity;
+import net.minecraft.server.world.ServerWorld;
 import net.minecraft.text.Text;
 import net.minecraft.util.math.BlockPos;
 
@@ -146,83 +147,51 @@ public final class Orchestrator {
                     err -> onServerThread(state, () -> failBuild(state, err)));
             }
             case PLANNING -> {
-                emit(state, "Orchestrator", "→ PLANNING");
-                AgentProgressManager.updateLabel(state.playerId, "Planning structure…");
-                PlanningAgent.run(state, getGemini(),
+                emit(state, "Orchestrator", "→ BLUEPRINTING (via BlueprintPlanningAgent)");
+                AgentProgressManager.updateLabel(state.playerId, "Planning blueprint…");
+                BlueprintPlanningAgent.run(state, getGemini(),
                     () -> onServerThread(state, () -> {
-                        emit(state, "PlanningAgent",
-                                "Plan: " + state.componentPlan.stream()
-                                        .map(c -> c.name).reduce((a, b) -> a + " → " + b).orElse("(empty)")
-                                + " (" + state.componentPlan.size() + " components)");
-                        state.currentComponentIndex = 0;
-                        transition(state, OrchestratorState.GENERATING);
+                        emit(state, "BlueprintPlanningAgent",
+                                "Blueprint '" + state.blueprint.name + "': "
+                                + state.blueprint.primitives.size() + " primitives, "
+                                + state.compiledBlueprint.ops().size() + " blocks");
+                        state.completedOps = new java.util.ArrayList<>(state.compiledBlueprint.ops());
+                        transition(state, OrchestratorState.PLACING);
                     }),
                     err -> onServerThread(state, () -> failBuild(state, err)));
             }
-            case GENERATING -> {
-                ComponentPlan comp = currentComponent(state);
-                String label = comp != null
-                        ? "Generating " + (state.currentComponentIndex + 1) + "/"
-                          + state.componentPlan.size() + ": " + comp.name + "…"
-                        : "Generating…";
-                emit(state, "Generation", "Generating component "
-                        + (state.currentComponentIndex + 1)
-                        + (state.componentPlan != null ? "/" + state.componentPlan.size() : "")
-                        + (comp != null ? ": " + comp.name : ""));
-                AgentProgressManager.updateLabel(state.playerId, label);
-                int retryAttempt = comp != null ? comp.retryCount : 0;
-                String priorReason = comp != null ? comp.lastFailureReason : null;
-                GenerationAgent.runComponent(state, getGemini(), retryAttempt, priorReason,
-                    () -> onServerThread(state, () -> transition(state, OrchestratorState.CRITIQUING)),
-                    (reason, shouldRetry) -> onServerThread(state, () -> {
-                        emit(state, "Critic", "Component failed: " + reason);
-                        if (shouldRetry) {
-                            transition(state, OrchestratorState.GENERATING);
-                        } else {
-                            advanceOrComplete(state);
-                        }
-                    }));
-            }
-            case CRITIQUING -> {
-                ComponentPlan approved = currentComponent(state);
-                emit(state, "Critic", "Component '" + (approved != null ? approved.name : "?") + "' passed"
-                        + (approved != null && approved.pendingOps != null
-                                ? " (" + approved.pendingOps.size() + " blocks)" : "") + ".");
-                transition(state, OrchestratorState.PLACING);
-            }
+            case GENERATING -> throw new UnsupportedOperationException(
+                    "GENERATING: old per-component pipeline removed in Refactor 2. " +
+                    "This path should not be reachable until the Step-9 state machine rewrite.");
+            case CRITIQUING -> throw new UnsupportedOperationException(
+                    "CRITIQUING: old programmatic critic removed in Refactor 2. " +
+                    "This path should not be reachable until the Step-9 state machine rewrite.");
             case PLACING -> {
-                ComponentPlan comp = currentComponent(state);
-                if (comp == null || comp.pendingOps == null) {
-                    failBuild(state, "PLACING: no pending ops for component at index " + state.currentComponentIndex);
+                if (state.completedOps.isEmpty()) {
+                    emit(state, "Orchestrator", "No ops to place — blueprint produced zero blocks.");
+                    transition(state, OrchestratorState.COMPLETE);
                     return;
                 }
-                emit(state, "Orchestrator", "→ PLACING component '" + comp.name + "' (" + comp.pendingOps.size() + " blocks)");
+                emit(state, "Orchestrator", "→ PLACING (" + state.completedOps.size() + " blocks)");
 
                 if (state.isWebBuild) {
-                    // Web builds have no world — accumulate ops and advance immediately.
-                    state.completedOps.addAll(comp.pendingOps);
-                    emit(state, "Placement", "Collected component '" + comp.name
-                            + "' (" + comp.pendingOps.size() + " blocks) for web plan.");
-                    advanceOrComplete(state);
+                    emit(state, "Placement", "Web build: collected "
+                            + state.completedOps.size() + " blocks for plan export.");
+                    transition(state, OrchestratorState.COMPLETE);
                     return;
                 }
 
-                net.minecraft.server.world.ServerWorld world =
-                        (net.minecraft.server.world.ServerWorld) state.player.getWorld();
-                PlacementAgent.placeComponent(state, world, comp.pendingOps, comp,
-                    () -> {
-                        emit(state, "Placement", "Placed component '" + comp.name
-                                + "' (" + comp.pendingOps.size() + " blocks)");
-                        advanceOrComplete(state);
-                    },
-                    err -> onServerThread(state, () -> failBuild(state, err)));
+                ServerWorld world = (ServerWorld) state.player.getWorld();
+                AgentProgressManager.updateLabel(state.playerId, "Placing blocks…");
+                BuildQueueManager.startComponentBuild(
+                    state.playerId, world, state.placementOrigin, state.completedOps,
+                    () -> onServerThread(state, () -> {
+                        emit(state, "Placement", "Placed " + state.completedOps.size() + " blocks.");
+                        transition(state, OrchestratorState.COMPLETE);
+                    }));
             }
             case COMPLETE -> {
-                int totalBlocks = state.completedOps.size();
-                int totalComps  = state.componentPlan != null ? state.componentPlan.size() : 0;
-                int skipped     = state.failedComponentIds.size();
-                emit(state, "Build", "Complete — " + totalBlocks + " blocks across "
-                        + totalComps + " components" + (skipped > 0 ? " (" + skipped + " skipped)" : "") + ".");
+                emit(state, "Build", "Complete — " + state.completedOps.size() + " blocks.");
                 AgentProgressManager.stop(state.playerId);
                 BuildJobManager.finish(state.playerId);
                 activeBuilds.remove(state.playerId);
@@ -232,15 +201,6 @@ public final class Orchestrator {
             }
             case FAILED -> { /* failBuild() handles cleanup */ }
             case IDLE    -> { /* start state */ }
-        }
-    }
-
-    void advanceOrComplete(BuildState state) {
-        state.currentComponentIndex++;
-        if (state.componentPlan != null && state.currentComponentIndex < state.componentPlan.size()) {
-            transition(state, OrchestratorState.GENERATING);
-        } else {
-            transition(state, OrchestratorState.COMPLETE);
         }
     }
 
@@ -383,12 +343,6 @@ public final class Orchestrator {
         return gemini;
     }
 
-    private static ComponentPlan currentComponent(BuildState state) {
-        if (state.componentPlan == null) return null;
-        if (state.currentComponentIndex < 0 || state.currentComponentIndex >= state.componentPlan.size()) return null;
-        return state.componentPlan.get(state.currentComponentIndex);
-    }
-
     /** Serialises the completed build as a { meta, ops } JSON string for the web dashboard. */
     private static String buildPlanJson(BuildState state) {
         BuildPlan plan = new BuildPlan();
@@ -396,9 +350,6 @@ public final class Orchestrator {
         plan.meta = new BuildPlan.Meta();
         plan.meta.blockCount = state.completedOps.size();
         plan.meta.theme = state.spec != null ? state.spec.type : "web_build";
-        if (!state.failedComponentIds.isEmpty()) {
-            plan.meta.warnings = new ArrayList<>(state.failedComponentIds);
-        }
         return GSON.toJson(plan);
     }
 }

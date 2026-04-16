@@ -49,16 +49,8 @@ public final class BuildState {
     /** Wall-clock ms when the iteration loop started; used for budget enforcement. */
     long iterationStartMs;
 
-    // ---- Legacy generation loop state (deprecated — removed in Step 4) ----
-    /** @deprecated replaced by blueprint pipeline; will be removed in Refactor 2 Step 4 */
-    @Deprecated List<ComponentPlan> componentPlan;
-    /** @deprecated replaced by blueprint pipeline; will be removed in Refactor 2 Step 4 */
-    @Deprecated int currentComponentIndex;
-
     // ---- Placement accumulator ----
     List<BlockOp> completedOps;
-    /** @deprecated replaced by blueprint pipeline; will be removed in Refactor 2 Step 4 */
-    @Deprecated List<String> failedComponentIds;
 
     // ---- Spatial context ----
     BlockPos placementOrigin;
@@ -93,9 +85,7 @@ public final class BuildState {
                 : BlockPos.ORIGIN;
         this.state = OrchestratorState.IDLE;
         this.completedOps = new ArrayList<>();
-        this.failedComponentIds = new ArrayList<>();
         this.eventLog = new CopyOnWriteArrayList<>();
-        this.currentComponentIndex = 0;
         this.iterationCount = 0;
     }
 }
