@@ -151,9 +151,9 @@ Converts a raw natural language prompt into a structured spec. The only job of t
 
 Create `src/main/java/com/rayyan/tesseract/agent/InterpretationAgent.java`:
 
-- [ ] Method: `void run(BuildState state, GeminiClient gemini, Runnable onComplete, Consumer<String> onError)` — calls `gemini.complete(systemPrompt, state.originalPrompt)` (or the multimodal overload if `state.referenceImageBytes != null`)
-- [ ] On success: parses the JSON response into `BuildSpec`, sets `state.spec`, emits a `BuildEvent` with a human-readable summary (e.g. "Interpreted: gothic gate, 8×14, features: twin_towers, arch, crenellations"), calls `onComplete`
-- [ ] On parse failure: calls `onError("InterpretationAgent failed to parse spec: " + rawResponse.substring(0, 120))`
+- [x] Method: `void run(BuildState state, GeminiClient gemini, Runnable onComplete, Consumer<String> onError)` — calls `gemini.complete(systemPrompt, state.originalPrompt)` (or the multimodal overload if `state.referenceImageBytes != null`)
+- [x] On success: parses the JSON response into `BuildSpec`, sets `state.spec`, emits a `BuildEvent` with a human-readable summary (e.g. "Interpreted: gothic gate, 8×14, features: twin_towers, arch, crenellations"), calls `onComplete`
+- [x] On parse failure: calls `onError("InterpretationAgent failed to parse spec: " + rawResponse.substring(0, 120))`
 
 ### 4.3 — Connect to Orchestrator
 
