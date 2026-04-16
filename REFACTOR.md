@@ -316,9 +316,9 @@ The web frontend already has image upload built — `app.js` reads attached file
 
 ### 10.1 — Pass image from `server.py` to the Java mod's `/build` endpoint
 
-- [ ] In `server.py`'s `do_POST /generate` handler (updated in Step 1.3), if `images` is non-empty, extract the first image: strip the `data:image/png;base64,` prefix from `images[0]["dataUrl"]` to get the raw base64 string, and read `images[0]["name"]` to infer the mime type (`.png` → `image/png`, `.jpg`/`.jpeg` → `image/jpeg`)
-- [ ] Include `"imageBase64"` and `"imageMimeType"` in the body forwarded to `POST localhost:4890/build`; if no image is attached, omit these fields (the Java side already handles nullable)
-- [ ] The Java embedded HTTP server's `/build` handler (Step 9.2) decodes the base64 string to `byte[]` using `Base64.getDecoder().decode(imageBase64)` and passes it into `Orchestrator.run()`
+- [x] In `server.py`'s `do_POST /generate` handler (updated in Step 1.3), if `images` is non-empty, extract the first image: strip the `data:image/png;base64,` prefix from `images[0]["dataUrl"]` to get the raw base64 string, and read `images[0]["name"]` to infer the mime type (`.png` → `image/png`, `.jpg`/`.jpeg` → `image/jpeg`)
+- [x] Include `"imageBase64"` and `"imageMimeType"` in the body forwarded to `POST localhost:4891/build`; if no image is attached, omit these fields (the Java side already handles nullable)
+- [x] The Java embedded HTTP server's `/build` handler (Step 9.2) decodes the base64 string to `byte[]` using `Base64.getDecoder().decode(imageBase64)` and passes it into `Orchestrator.run()`
 
 ### 10.2 — Wire multimodal call into `InterpretationAgent`
 
