@@ -1,7 +1,6 @@
 package com.rayyan.tesseract.paste;
 
 import com.rayyan.tesseract.TesseractMod;
-import com.rayyan.tesseract.gumloop.GumloopClient;
 import com.rayyan.tesseract.gumloop.GumloopPayload;
 import com.rayyan.tesseract.jobs.BuildJobManager;
 import com.rayyan.tesseract.jobs.BuildQueueManager;
@@ -66,7 +65,7 @@ public final class PlanPasteClient {
 						BuildJobManager.finish(player.getUuid());
 						return;
 					}
-					GumloopClient.PlanValidationResult result = GumloopClient.parsePlanForSelection(body, selection, requestId);
+					PlanParser.PlanValidationResult result = PlanParser.parsePlanForSelection(body, selection, requestId);
 					if (result.error != null) {
 						player.sendMessage(Text.of("Error: " + result.error + " (request " + requestId + ")."), false);
 						BuildJobManager.finish(player.getUuid());

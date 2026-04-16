@@ -17,8 +17,6 @@ import net.minecraft.world.World;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.rayyan.tesseract.gumloop.GumloopClient;
-import com.rayyan.tesseract.gumloop.GumloopProgressManager;
 import com.rayyan.tesseract.jobs.BuildJobManager;
 import com.rayyan.tesseract.jobs.BuildQueueManager;
 import com.rayyan.tesseract.network.SelectionNetworking;
@@ -119,7 +117,6 @@ public class TesseractMod implements ModInitializer {
 		ServerTickEvents.END_SERVER_TICK.register(server -> {
 			BuildJobManager.tick();
 			BuildQueueManager.tick(server);
-			GumloopProgressManager.tick(server);
 		});
 
 		AttackBlockCallback.EVENT.register((player, world, hand, pos, direction) -> {
@@ -199,8 +196,10 @@ public class TesseractMod implements ModInitializer {
 		if (contextSelection != null && contextSelection.isComplete()) {
 			sendMessage(source, "Context attached (cyan selection).");
 		}
-		GumloopClient.sendBuildRequest(player, selection, contextSelection, prompt);
-		return 1;
+		// TODO(Step 9): Replace with Orchestrator.getInstance().run(player, selection, contextSelection, prompt, null, null)
+		sendMessage(source, "Error: agent pipeline not yet implemented.");
+		BuildJobManager.finish(player.getUuid());
+		return 0;
 	}
 
 	private static int startPaste(ServerCommandSource source, ServerPlayerEntity player, String sourceUrl) {
