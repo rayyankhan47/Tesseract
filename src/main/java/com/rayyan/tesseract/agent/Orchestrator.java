@@ -132,8 +132,10 @@ public final class Orchestrator {
                 AgentProgressManager.updateLabel(state.playerId, "Interpreting prompt…");
                 InterpretationAgent.run(state, getGemini(),
                     () -> onServerThread(state, () -> {
+                        boolean usedImage = state.referenceImageBytes != null;
+                        String prefix = usedImage ? "Interpreted with visual reference: " : "Interpreted: ";
                         emit(state, "InterpretationAgent",
-                                "Interpreted: " + state.spec.type + " (" + state.spec.style + "), "
+                                prefix + state.spec.type + " (" + state.spec.style + "), "
                                 + state.spec.width + "×" + state.spec.height + "×" + state.spec.depth
                                 + (state.spec.features != null && !state.spec.features.isEmpty()
                                         ? ", features: " + String.join(", ", state.spec.features) : ""));

@@ -36,7 +36,7 @@ The input and output of the system are unchanged: player types a prompt, blocks 
 - [x] **Step 7** — Build CriticAgent
 - [x] **Step 8** — Extract PlacementAgent
 - [x] **Step 9** — Wire everything end-to-end and test
-- [ ] **Step 10** — Add image reference support (multimodal)
+- [x] **Step 10** — Add image reference support (multimodal)
 
 ---
 
@@ -322,10 +322,10 @@ The web frontend already has image upload built — `app.js` reads attached file
 
 ### 10.2 — Wire multimodal call into `InterpretationAgent`
 
-- [ ] `BuildState.referenceImageBytes` and `BuildState.referenceImageMimeType` are already defined (Step 2.1); `Orchestrator.run()` already accepts them (Step 9.1)
-- [ ] In `InterpretationAgent.run()`, check `state.referenceImageBytes != null`; if true, call `gemini.complete(systemPrompt, userPrompt, state.referenceImageBytes, state.referenceImageMimeType)` instead of the text-only overload
-- [ ] `GeminiClient`'s multimodal overload constructs the request body with a `contents` array that has two `parts`: `{ "text": userPrompt }` and `{ "inlineData": { "mimeType": mimeType, "data": base64String } }`
-- [ ] Emit a `BuildEvent` that notes the image was used: "[Interpretation] Interpreted with visual reference: gothic gate, 8×14..."
+- [x] `BuildState.referenceImageBytes` and `BuildState.referenceImageMimeType` are already defined (Step 2.1); `Orchestrator.run()` already accepts them (Step 9.1)
+- [x] In `InterpretationAgent.run()`, check `state.referenceImageBytes != null`; if true, call `gemini.complete(systemPrompt, userPrompt, state.referenceImageBytes, state.referenceImageMimeType)` instead of the text-only overload
+- [x] `GeminiClient`'s multimodal overload constructs the request body with a `contents` array that has two `parts`: `{ "text": userPrompt }` and `{ "inlineData": { "mimeType": mimeType, "data": base64String } }`
+- [x] Emit a `BuildEvent` that notes the image was used: "[Interpretation] Interpreted with visual reference: gothic gate, 8×14..."
 
 ### 10.3 — Test and polish the web image flow
 
