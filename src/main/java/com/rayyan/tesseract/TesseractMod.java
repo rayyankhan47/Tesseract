@@ -17,6 +17,7 @@ import net.minecraft.world.World;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.rayyan.tesseract.agent.Orchestrator;
 import com.rayyan.tesseract.jobs.BuildJobManager;
 import com.rayyan.tesseract.jobs.BuildQueueManager;
 import com.rayyan.tesseract.network.SelectionNetworking;
@@ -197,10 +198,8 @@ public class TesseractMod implements ModInitializer {
 		if (contextSelection != null && contextSelection.isComplete()) {
 			sendMessage(source, "Context attached (cyan selection).");
 		}
-		// TODO(Step 9): Replace with Orchestrator.getInstance().run(player, selection, contextSelection, prompt, null, null)
-		sendMessage(source, "Error: agent pipeline not yet implemented.");
-		BuildJobManager.finish(player.getUuid());
-		return 0;
+		Orchestrator.getInstance().run(player, selection, contextSelection, prompt, null, null);
+		return 1;
 	}
 
 	private static int startPaste(ServerCommandSource source, ServerPlayerEntity player, String sourceUrl) {

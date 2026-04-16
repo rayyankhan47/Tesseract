@@ -285,9 +285,9 @@ Connect the Orchestrator into the existing entry point, add the embedded HTTP se
 
 ### 9.1 — Replace `startBuild` in `TesseractMod.java`
 
-- [ ] In `TesseractMod.startBuild()`, replace the call to `GumloopClient.sendBuildRequest(...)` with `Orchestrator.getInstance().run(player, selection, contextSelection, prompt, null, null)` (null image bytes = text-only)
-- [ ] `Orchestrator` is a singleton initialized once in `TesseractMod.onInitialize()` with a shared `GeminiClient` instance
-- [ ] `BuildJobManager.start(player.getUuid())` is still called before invoking the Orchestrator — the lock remains the player-facing guard
+- [x] In `TesseractMod.startBuild()`, replace the call to `GumloopClient.sendBuildRequest(...)` with `Orchestrator.getInstance().run(player, selection, contextSelection, prompt, null, null)` (null image bytes = text-only)
+- [x] `Orchestrator` is a singleton initialized once in `TesseractMod.onInitialize()` with a shared `GeminiClient` instance
+- [x] `BuildJobManager.start(player.getUuid())` is still called before invoking the Orchestrator — the lock remains the player-facing guard
 
 ### 9.2 — Add embedded HTTP server for the web dashboard path
 
