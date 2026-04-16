@@ -236,10 +236,10 @@ Programmatic validation only — no LLM involved. Validates a single component's
 
 Create `src/main/java/com/rayyan/tesseract/agent/CriticAgent.java`:
 
-- [ ] Method: `CriticResult validate(List<BlockOp> ops, ComponentPlan component, List<String> palette)` — returns a `CriticResult` with a boolean `passed` and a `String failureReason`
-- [ ] Check 1 (null/empty): if `ops` is null or empty, return failure "component generated zero blocks"
-- [ ] Check 2 (palette): for each op, verify `op.block` is in the allowed palette (`defaultPalette()` — the existing 17-block list); collect all violations; if any, return failure listing the offending block IDs
-- [ ] Check 3 (bounds): for each op, verify `0 <= op.x < component.sizeX`, `0 <= op.y < component.sizeY`, `0 <= op.z < component.sizeZ`; if any out-of-bounds, return failure with the offending coordinate
+- [x] Method: `CriticResult validate(List<BlockOp> ops, ComponentPlan component, List<String> palette)` — returns a `CriticResult` with a boolean `passed` and a `String failureReason`
+- [x] Check 1 (null/empty): if `ops` is null or empty, return failure "component generated zero blocks"
+- [x] Check 2 (palette): for each op, verify `op.block` is in the allowed palette (`defaultPalette()` — the existing 17-block list); collect all violations; if any, return failure listing the offending block IDs
+- [x] Check 3 (bounds): for each op, verify `0 <= op.x < component.sizeX`, `0 <= op.y < component.sizeY`, `0 <= op.z < component.sizeZ`; if any out-of-bounds, return failure with the offending coordinate
 
 ### 7.2 — Floating block detection
 
