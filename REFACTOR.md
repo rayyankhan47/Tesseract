@@ -200,10 +200,10 @@ Iterates through the component list one at a time. For each component, makes one
 
 ### 6.1 — Implement the iteration loop and retry logic
 
-- [ ] The agent is invoked from the Orchestrator for the component at `state.currentComponentIndex`
-- [ ] It tracks a per-component retry count (stored on `ComponentPlan` or as a local field passed through the callback chain); max 3 retries
-- [ ] On CriticAgent failure: increment retry, adjust the user prompt to append the critic's failure reason (e.g. "Previous attempt failed: floating blocks detected at y=3. Ensure every block at y>0 has a solid block below it."), re-invoke the LLM call
-- [ ] On 3 consecutive failures: add component id to `state.failedComponentIds`, emit a warning event, advance `state.currentComponentIndex` and continue to the next component rather than aborting the entire build
+- [x] The agent is invoked from the Orchestrator for the component at `state.currentComponentIndex`
+- [x] It tracks a per-component retry count (stored on `ComponentPlan` or as a local field passed through the callback chain); max 3 retries
+- [x] On CriticAgent failure: increment retry, adjust the user prompt to append the critic's failure reason (e.g. "Previous attempt failed: floating blocks detected at y=3. Ensure every block at y>0 has a solid block below it."), re-invoke the LLM call
+- [x] On 3 consecutive failures: add component id to `state.failedComponentIds`, emit a warning event, advance `state.currentComponentIndex` and continue to the next component rather than aborting the entire build
 
 ### 6.2 — Define the per-component prompt and output schema
 

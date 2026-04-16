@@ -1,5 +1,7 @@
 package com.rayyan.tesseract.agent;
 
+import com.rayyan.tesseract.gumloop.GumloopPayload;
+
 import java.util.List;
 
 /**
@@ -35,4 +37,13 @@ public final class ComponentPlan {
 
     /** Retry count — incremented by GenerationAgent on CriticAgent failure. */
     int retryCount;
+
+    /** Last failure reason from CriticAgent — appended to the next retry prompt. */
+    String lastFailureReason;
+
+    /**
+     * Block operations approved by CriticAgent for this component.
+     * Set by GenerationAgent on success; consumed by PlacementAgent.
+     */
+    List<GumloopPayload.BlockOp> pendingOps;
 }
