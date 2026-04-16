@@ -1,0 +1,62 @@
+{
+  "name": "stone_watchtower",
+  "bounds": { "sizeX": 8, "sizeY": 16, "sizeZ": 8 },
+  "primitives": [
+    {
+      "id": "foundation",
+      "type": "platform",
+      "origin": [0, 0, 0],
+      "size": [8, 1, 8],
+      "material": "minecraft:cobblestone",
+      "edge_material": "minecraft:stone_brick_wall"
+    },
+    {
+      "id": "walls",
+      "type": "walls",
+      "on": "foundation",
+      "height": 12,
+      "material": "minecraft:stone_bricks",
+      "corner_material": "minecraft:stone_brick_wall",
+      "openings": [
+        { "face": "south", "u_offset": 2, "v_offset": 0, "width": 2, "height": 3, "type": "door" },
+        { "face": "north", "u_offset": 3, "v_offset": 5, "width": 2, "height": 2, "type": "window" }
+      ]
+    },
+    {
+      "id": "col_sw",
+      "type": "column",
+      "origin": [0, 1, 0],
+      "height": 12,
+      "material": "minecraft:stone_brick_wall"
+    },
+    {
+      "id": "col_se",
+      "type": "column",
+      "origin": [7, 1, 0],
+      "height": 12,
+      "material": "minecraft:stone_brick_wall"
+    },
+    {
+      "id": "col_nw",
+      "type": "column",
+      "origin": [0, 1, 7],
+      "height": 12,
+      "material": "minecraft:stone_brick_wall"
+    },
+    {
+      "id": "col_ne",
+      "type": "column",
+      "origin": [7, 1, 7],
+      "height": 12,
+      "material": "minecraft:stone_brick_wall"
+    },
+    {
+      "id": "parapet",
+      "type": "flat_roof",
+      "on": "walls",
+      "material": "minecraft:stone_bricks",
+      "battlements": true,
+      "battlement_material": "minecraft:stone_brick_wall"
+    }
+  ]
+}

@@ -1,0 +1,37 @@
+{
+  "name": "cozy_oak_cabin",
+  "bounds": { "sizeX": 12, "sizeY": 12, "sizeZ": 10 },
+  "primitives": [
+    {
+      "id": "foundation",
+      "type": "platform",
+      "origin": [0, 0, 0],
+      "size": [12, 1, 10],
+      "material": "minecraft:stone_bricks",
+      "edge_material": "minecraft:cobblestone"
+    },
+    {
+      "id": "walls",
+      "type": "walls",
+      "on": "foundation",
+      "height": 6,
+      "material": "minecraft:oak_planks",
+      "corner_material": "minecraft:oak_log",
+      "openings": [
+        { "face": "south", "u_offset": 4, "v_offset": 0, "width": 2, "height": 3, "type": "door" },
+        { "face": "east",  "u_offset": 2, "v_offset": 2, "width": 2, "height": 2, "type": "window" },
+        { "face": "west",  "u_offset": 2, "v_offset": 2, "width": 2, "height": 2, "type": "window" }
+      ]
+    },
+    {
+      "id": "roof",
+      "type": "gable_roof",
+      "on": "walls",
+      "ridge_axis": "z",
+      "overhang": 1,
+      "stairs_material": "minecraft:oak_stairs",
+      "slab_material": "minecraft:oak_slab",
+      "ridge_material": "minecraft:oak_log"
+    }
+  ]
+}
