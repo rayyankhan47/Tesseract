@@ -1,5 +1,7 @@
 package com.rayyan.tesseract.agent;
 
+import com.rayyan.tesseract.blueprint.Blueprint;
+import com.rayyan.tesseract.blueprint.CompiledBlueprint;
 import com.rayyan.tesseract.selection.Selection;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.util.math.BlockPos;
@@ -34,14 +36,29 @@ public final class BuildState {
 
     // ---- Agent outputs (written once, then read-only) ----
     BuildSpec spec;                     // set by InterpretationAgent
-    List<ComponentPlan> componentPlan;  // set by PlanningAgent
 
-    // ---- Generation loop state ----
-    int currentComponentIndex;
+    // ---- Blueprint DSL pipeline (Refactor 2) ----
+    /** Current best Blueprint (updated on each critic patch). Set by BlueprintPlanningAgent. */
+    Blueprint blueprint;
+    /** Output of the most recent BlueprintCompiler.compile() call. */
+    CompiledBlueprint compiledBlueprint;
+    /** Number of visual critic passes completed so far. */
+    int iterationCount;
+    /** Cached isometric render PNG (for critic calls and optional debug export). */
+    byte[] lastRenderPng;
+    /** Wall-clock ms when the iteration loop started; used for budget enforcement. */
+    long iterationStartMs;
+
+    // ---- Legacy generation loop state (deprecated — removed in Step 4) ----
+    /** @deprecated replaced by blueprint pipeline; will be removed in Refactor 2 Step 4 */
+    @Deprecated List<ComponentPlan> componentPlan;
+    /** @deprecated replaced by blueprint pipeline; will be removed in Refactor 2 Step 4 */
+    @Deprecated int currentComponentIndex;
 
     // ---- Placement accumulator ----
     List<BlockOp> completedOps;
-    List<String> failedComponentIds;
+    /** @deprecated replaced by blueprint pipeline; will be removed in Refactor 2 Step 4 */
+    @Deprecated List<String> failedComponentIds;
 
     // ---- Spatial context ----
     BlockPos placementOrigin;
@@ -79,5 +96,6 @@ public final class BuildState {
         this.failedComponentIds = new ArrayList<>();
         this.eventLog = new CopyOnWriteArrayList<>();
         this.currentComponentIndex = 0;
+        this.iterationCount = 0;
     }
 }
