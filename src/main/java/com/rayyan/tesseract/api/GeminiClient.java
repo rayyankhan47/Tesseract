@@ -9,6 +9,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.Base64;
+import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
 import com.google.gson.Gson;
@@ -17,6 +18,8 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.google.gson.JsonSyntaxException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Minimal client for the Gemini generateContent REST API.
@@ -28,8 +31,18 @@ import com.google.gson.JsonSyntaxException;
  * the first candidate, so callers stay non-blocking on the server thread.
  */
 public final class GeminiClient {
-    private static final String API_URL =
-        "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent";
+    private static final Logger LOGGER = LoggerFactory.getLogger("tesseract.gemini");
+    private static final String BASE_URL =
+        "https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent";
+    /**
+     * Models tried in order. On a 5xx the client falls through to the next entry;
+     * non-5xx errors (4xx, parse failures) fail immediately without fallback.
+     */
+    private static final List<String> MODELS = List.of(
+        "gemini-2.0-flash-lite-preview",
+        "gemini-2.5-flash",
+        "gemini-2.5-flash-lite"
+    );
     private static final Gson GSON = new Gson();
     private static final HttpClient HTTP = HttpClient.newHttpClient();
 
@@ -123,7 +136,12 @@ public final class GeminiClient {
     // -------------------------------------------------------------------------
 
     private CompletableFuture<String> send(JsonObject body) {
-        String url = API_URL + "?key=" + apiKey;
+        return sendWithFallback(body, 0);
+    }
+
+    private CompletableFuture<String> sendWithFallback(JsonObject body, int modelIndex) {
+        String model = MODELS.get(modelIndex);
+        String url = String.format(BASE_URL, model) + "?key=" + apiKey;
         HttpRequest request = HttpRequest.newBuilder()
             .uri(URI.create(url))
             .timeout(Duration.ofSeconds(30))
@@ -132,12 +150,21 @@ public final class GeminiClient {
             .build();
 
         return HTTP.sendAsync(request, HttpResponse.BodyHandlers.ofString())
-            .thenApply(response -> {
-                if (response.statusCode() < 200 || response.statusCode() >= 300) {
-                    throw new RuntimeException(
-                        "Gemini API error " + response.statusCode() + ": " + preview(response.body()));
+            .thenCompose(response -> {
+                int status = response.statusCode();
+                if (status >= 500 && modelIndex + 1 < MODELS.size()) {
+                    LOGGER.warn("Gemini model '{}' returned {}; falling back to '{}'.",
+                            model, status, MODELS.get(modelIndex + 1));
+                    return sendWithFallback(body, modelIndex + 1);
                 }
-                return extractText(response.body());
+                if (status < 200 || status >= 300) {
+                    CompletableFuture<String> failed = new CompletableFuture<>();
+                    failed.completeExceptionally(new RuntimeException(
+                            "Gemini API error " + status + " (model=" + model + "): "
+                            + preview(response.body())));
+                    return failed;
+                }
+                return CompletableFuture.completedFuture(extractText(response.body()));
             });
     }
 
