@@ -58,11 +58,11 @@ PlacementAgent             → places block-by-block via BuildQueueManager
 
 ## Progress Tracker
 
-- [ ] **Step 1** — Design and define the Blueprint DSL
-- [ ] **Step 2** — Implement the deterministic Blueprint compiler
-- [ ] **Step 3** — Build the BlueprintPlanningAgent
-- [ ] **Step 4** — Remove the old per-component generation flow
-- [ ] **Step 5** — Implement the isometric block renderer
+- [x] **Step 1** — Design and define the Blueprint DSL
+- [x] **Step 2** — Implement the deterministic Blueprint compiler
+- [x] **Step 3** — Build the BlueprintPlanningAgent
+- [x] **Step 4** — Remove the old per-component generation flow
+- [x] **Step 5** — Implement the isometric block renderer
 - [ ] **Step 6** — Build the VisualCriticAgent and patch applier
 - [ ] **Step 7** — Wire the iteration loop into the Orchestrator
 - [ ] **Step 8** — Build the DetailAgent
