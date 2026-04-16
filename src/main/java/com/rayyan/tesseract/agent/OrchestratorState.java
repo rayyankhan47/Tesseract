@@ -22,5 +22,26 @@ public enum OrchestratorState {
     CRITIQUING,
     PLACING,
     COMPLETE,
-    FAILED
+    FAILED;
+
+    /**
+     * Throws {@link IllegalStateException} if the {@code from → to} transition is not in the
+     * allowed set. Any state may transition to {@code FAILED}.
+     */
+    public static void assertTransition(OrchestratorState from, OrchestratorState to) {
+        if (to == FAILED) return; // any → FAILED is always allowed
+        boolean allowed = switch (from) {
+            case IDLE        -> to == INTERPRETING;
+            case INTERPRETING -> to == PLANNING;
+            case PLANNING    -> to == GENERATING;
+            case GENERATING  -> to == CRITIQUING;
+            case CRITIQUING  -> to == PLACING || to == GENERATING; // GENERATING = retry
+            case PLACING     -> to == GENERATING || to == COMPLETE; // GENERATING = next component
+            case COMPLETE, FAILED -> false; // terminal states — no exit
+        };
+        if (!allowed) {
+            throw new IllegalStateException(
+                "Illegal Orchestrator state transition: " + from + " → " + to);
+        }
+    }
 }

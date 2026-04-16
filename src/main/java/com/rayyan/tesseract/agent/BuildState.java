@@ -2,6 +2,7 @@ package com.rayyan.tesseract.agent;
 
 import com.rayyan.tesseract.gumloop.GumloopPayload;
 import com.rayyan.tesseract.selection.Selection;
+import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.util.math.BlockPos;
 
 import java.util.ArrayList;
@@ -24,6 +25,8 @@ public final class BuildState {
 
     // ---- Identity ----
     UUID playerId;
+    /** Nullable — may be null for web-triggered builds or after player disconnect. */
+    ServerPlayerEntity player;
     String originalPrompt;
 
     // ---- Optional reference image (nullable) ----
@@ -51,10 +54,11 @@ public final class BuildState {
     // ---- Event log (CopyOnWriteArrayList — safe to read off server thread) ----
     List<BuildEvent> eventLog;
 
-    BuildState(UUID playerId, String prompt,
+    BuildState(UUID playerId, ServerPlayerEntity player, String prompt,
                byte[] imageBytes, String imageMimeType,
                Selection selection) {
         this.playerId = playerId;
+        this.player = player;
         this.originalPrompt = prompt;
         this.referenceImageBytes = imageBytes;
         this.referenceImageMimeType = imageMimeType;
