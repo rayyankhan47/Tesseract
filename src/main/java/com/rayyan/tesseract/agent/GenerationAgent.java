@@ -265,7 +265,7 @@ public final class GenerationAgent {
      * This replaces the old 536-block default list which bloated every prompt
      * and was a primary driver of Gemini 503 errors on large builds.
      */
-    static List<String> buildFocusedPalette(BuildSpec spec) {
+    public static List<String> buildFocusedPalette(BuildSpec spec) {
         Set<String> palette = new LinkedHashSet<>();
 
         // Universal set — always useful regardless of build style.
