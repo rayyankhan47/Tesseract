@@ -59,6 +59,15 @@ public final class BuildState {
     // ---- State machine ----
     OrchestratorState state;
 
+    /**
+     * Timeline entries appended each time the state machine transitions.
+     * Each entry is {@code "STATE_NAME:entryTimeMs"}.
+     * Used to build the one-line timeline log at COMPLETE (Step 9.3.3).
+     */
+    final java.util.List<String> timeline = new java.util.ArrayList<>();
+    /** Wall-clock ms when the current state was entered. */
+    long stateEnteredAtMs;
+
     // ---- Event log (CopyOnWriteArrayList — safe to read off server thread) ----
     List<BuildEvent> eventLog;
 
@@ -84,6 +93,7 @@ public final class BuildState {
                 ? selection.getMin()
                 : BlockPos.ORIGIN;
         this.state = OrchestratorState.IDLE;
+        this.stateEnteredAtMs = System.currentTimeMillis();
         this.completedOps = new ArrayList<>();
         this.eventLog = new CopyOnWriteArrayList<>();
         this.iterationCount = 0;

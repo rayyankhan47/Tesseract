@@ -137,6 +137,13 @@ public final class Orchestrator {
 
     void transition(BuildState state, OrchestratorState next) {
         OrchestratorState.assertTransition(state.state, next);
+
+        // Record how long the previous state took, then advance
+        long now = System.currentTimeMillis();
+        long durationMs = now - state.stateEnteredAtMs;
+        state.timeline.add(state.state.name() + ":" + durationMs);
+        state.stateEnteredAtMs = now;
+
         state.state = next;
 
         switch (next) {
@@ -155,15 +162,15 @@ public final class Orchestrator {
                                 + (state.spec.features != null && !state.spec.features.isEmpty()
                                         ? ", features: " + String.join(", ", state.spec.features) : ""));
                         synthesizeSelectionFromSpec(state);
-                        transition(state, OrchestratorState.PLANNING);
+                        transition(state, OrchestratorState.BLUEPRINTING);
                     }),
                     err -> onServerThread(state, () -> failBuild(state, err)));
             }
 
-            // ---- Stage 2: Blueprint planning (renamed BLUEPRINTING in Step 9) ----
-            case PLANNING -> {
+            // ---- Stage 2: Blueprint planning ------------------------------------
+            case BLUEPRINTING -> {
                 emit(state, "Orchestrator", "→ BLUEPRINTING");
-                AgentProgressManager.updateLabel(state.playerId, "Drafting blueprint…");
+                AgentProgressManager.updateLabel(state.playerId, "Blueprint drafting…");
                 BlueprintPlanningAgent.run(state, getGemini(),
                     () -> onServerThread(state, () -> {
                         emit(state, "BlueprintPlanningAgent",
@@ -339,9 +346,15 @@ public final class Orchestrator {
 
             // ---- Terminal states ------------------------------------------------
             case COMPLETE -> {
+                // Seal the COMPLETE entry so the last state's duration is recorded
+                long completedAt = System.currentTimeMillis();
+                state.timeline.add("COMPLETE:" + (completedAt - state.stateEnteredAtMs));
+
                 emit(state, "Build", "Complete — " + state.completedOps.size() + " blocks, "
                         + state.iterationCount + " critic pass(es).");
-                AgentProgressManager.stop(state.playerId);
+                LOGGER.info("Timeline: {}", buildTimeline(state));
+
+                AgentProgressManager.flashComplete(state.playerId);
                 BuildJobManager.finish(state.playerId);
                 activeBuilds.remove(state.playerId);
                 if (state.webBuildFuture != null) {
@@ -350,12 +363,6 @@ public final class Orchestrator {
             }
             case FAILED -> { /* failBuild() handles cleanup */ }
             case IDLE   -> { /* start state */ }
-
-            // ---- Dead legacy states -------------------------------------------
-            case GENERATING -> throw new UnsupportedOperationException(
-                    "GENERATING: removed in Refactor 2 Step 4.");
-            case CRITIQUING -> throw new UnsupportedOperationException(
-                    "CRITIQUING: removed in Refactor 2 Step 4.");
         }
     }
 
@@ -537,6 +544,25 @@ public final class Orchestrator {
         } catch (Exception e) {
             LOGGER.warn("Failed to write debug critique: {}", e.getMessage());
         }
+    }
+
+    /**
+     * Builds a one-line timeline string from the state timeline entries.
+     * Format: {@code IDLE → INTERPRETING(1.2s) → BLUEPRINTING(4.3s) → … → COMPLETE}
+     */
+    private static String buildTimeline(BuildState state) {
+        if (state.timeline.isEmpty()) return "IDLE → COMPLETE";
+        StringBuilder sb = new StringBuilder();
+        for (String entry : state.timeline) {
+            int sep = entry.lastIndexOf(':');
+            if (sep < 0) { sb.append(entry).append(" → "); continue; }
+            String name   = entry.substring(0, sep);
+            long   dms    = Long.parseLong(entry.substring(sep + 1));
+            sb.append(name).append("(").append(dms / 1000.0).append("s) → ");
+        }
+        // Remove trailing " → "
+        if (sb.length() >= 4) sb.setLength(sb.length() - 4);
+        return sb.toString();
     }
 
     /** Serialises the completed build as a { meta, ops } JSON string for the web dashboard. */

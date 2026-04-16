@@ -13,13 +13,17 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * Shows an animated purple boss bar while the Orchestrator pipeline is running.
  *
- * Active during INTERPRETING, PLANNING, and GENERATING states.
- * Hidden automatically on COMPLETE or FAILED.
+ * Active from INTERPRETING through PLACING.
+ * On COMPLETE: briefly flashes green before hiding (2 s).
+ * On FAILED / cancellation / world switch: hidden immediately via {@link #stop}.
  *
  * Triangle-wave animation: oscillates between 10 % and 90 % every ~2.5 s,
  * giving an "indeterminate progress" feel (we have no real % from the LLM).
  */
 public final class AgentProgressManager {
+
+    /** How long the green "complete" flash lasts before the bar disappears. */
+    private static final long FLASH_DURATION_MS = 2_000L;
 
     private static final Map<UUID, ActiveBar> BARS = new ConcurrentHashMap<>();
 
@@ -49,7 +53,7 @@ public final class AgentProgressManager {
         }
     }
 
-    /** Remove and hide the bar for the given player. */
+    /** Remove and hide the bar for the given player immediately. */
     public static void stop(UUID playerId) {
         if (playerId == null) return;
         ActiveBar existing = BARS.remove(playerId);
@@ -59,8 +63,23 @@ public final class AgentProgressManager {
     }
 
     /**
+     * Briefly flashes the bar green at 100 % with the label "Build complete!"
+     * then hides it after {@value #FLASH_DURATION_MS} ms.
+     * The removal happens on the next {@link #tick} call after the flash expires.
+     */
+    public static void flashComplete(UUID playerId) {
+        if (playerId == null) return;
+        ActiveBar active = BARS.get(playerId);
+        if (active == null) return;
+        active.bar.setColor(BossBar.Color.GREEN);
+        active.bar.setPercent(1.0f);
+        active.bar.setName(Text.of("Tesseract: Build complete!"));
+        active.flashUntilMs = System.currentTimeMillis() + FLASH_DURATION_MS;
+    }
+
+    /**
      * Called every server tick from {@code Orchestrator.tick()}.
-     * Advances the triangle-wave animation for all active bars.
+     * Advances the triangle-wave animation; removes bars whose flash has expired.
      */
     public static void tick(MinecraftServer server) {
         if (server == null) return;
@@ -70,9 +89,16 @@ public final class AgentProgressManager {
             ActiveBar active = entry.getValue();
             if (active == null) return true;
 
+            // Expire the green flash once its window closes
+            if (active.flashUntilMs > 0 && now >= active.flashUntilMs) {
+                active.bar.clearPlayers();
+                return true;
+            }
+            // While flashing, leave the bar as-is (green, 100 %, "Build complete!")
+            if (active.flashUntilMs > 0) return false;
+
             ServerPlayerEntity player = server.getPlayerManager().getPlayer(playerId);
             if (player == null) {
-                // Player went offline — clean up silently.
                 active.bar.clearPlayers();
                 return true;
             }
@@ -89,6 +115,8 @@ public final class AgentProgressManager {
     private static final class ActiveBar {
         final ServerBossBar bar;
         final long startedAtMs;
+        /** When > 0, the bar is in "flash complete" mode and will be removed after this time. */
+        volatile long flashUntilMs = 0;
 
         ActiveBar(ServerBossBar bar, long startedAtMs) {
             this.bar = bar;
