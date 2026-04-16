@@ -10,7 +10,9 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.util.Base64;
 import java.util.List;
+import java.util.Random;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 
 import com.google.gson.Gson;
 import com.google.gson.JsonArray;
@@ -43,6 +45,17 @@ public final class GeminiClient {
         "gemini-2.5-flash",
         "gemini-2.5-flash-lite"
     );
+    /**
+     * Per-model retry policy for 5xx responses.
+     * Each model is tried up to (MAX_RETRIES_PER_MODEL + 1) times before falling back
+     * to the next model in the list.
+     * Delay formula: BASE_RETRY_MS * 2^attempt + random jitter in [0, JITTER_MS).
+     */
+    private static final int MAX_RETRIES_PER_MODEL = 2;
+    private static final long BASE_RETRY_MS = 1_000L;
+    private static final long JITTER_MS = 600L;
+    private static final Random RANDOM = new Random();
+
     private static final Gson GSON = new Gson();
     private static final HttpClient HTTP = HttpClient.newHttpClient();
 
@@ -136,10 +149,17 @@ public final class GeminiClient {
     // -------------------------------------------------------------------------
 
     private CompletableFuture<String> send(JsonObject body) {
-        return sendWithFallback(body, 0);
+        return sendWithFallback(body, 0, 0);
     }
 
-    private CompletableFuture<String> sendWithFallback(JsonObject body, int modelIndex) {
+    /**
+     * Sends the request to {@code MODELS[modelIndex]}, retrying on 5xx with
+     * exponential backoff before falling through to the next model.
+     *
+     * @param modelIndex   index into {@link #MODELS}
+     * @param retryAttempt 0-based retry count for the current model
+     */
+    private CompletableFuture<String> sendWithFallback(JsonObject body, int modelIndex, int retryAttempt) {
         String model = MODELS.get(modelIndex);
         String url = String.format(BASE_URL, model) + "?key=" + apiKey;
         HttpRequest request = HttpRequest.newBuilder()
@@ -152,11 +172,31 @@ public final class GeminiClient {
         return HTTP.sendAsync(request, HttpResponse.BodyHandlers.ofString())
             .thenCompose(response -> {
                 int status = response.statusCode();
-                if (status >= 500 && modelIndex + 1 < MODELS.size()) {
-                    LOGGER.warn("Gemini model '{}' returned {}; falling back to '{}'.",
-                            model, status, MODELS.get(modelIndex + 1));
-                    return sendWithFallback(body, modelIndex + 1);
+
+                if (status >= 500) {
+                    // Retry the same model with exponential backoff + jitter before falling back.
+                    if (retryAttempt < MAX_RETRIES_PER_MODEL) {
+                        long delayMs = (BASE_RETRY_MS << retryAttempt)
+                                + (long) (RANDOM.nextDouble() * JITTER_MS);
+                        LOGGER.warn("Gemini '{}' returned {} (attempt {}/{}); retrying in {}ms.",
+                                model, status, retryAttempt + 1, MAX_RETRIES_PER_MODEL + 1, delayMs);
+                        return CompletableFuture
+                                .runAsync(() -> {}, CompletableFuture.delayedExecutor(delayMs, TimeUnit.MILLISECONDS))
+                                .thenCompose(v -> sendWithFallback(body, modelIndex, retryAttempt + 1));
+                    }
+                    // Same model exhausted — try the next one (also from attempt 0).
+                    if (modelIndex + 1 < MODELS.size()) {
+                        LOGGER.warn("Gemini '{}' failed after {} attempts; falling back to '{}'.",
+                                model, MAX_RETRIES_PER_MODEL + 1, MODELS.get(modelIndex + 1));
+                        return sendWithFallback(body, modelIndex + 1, 0);
+                    }
+                    // All models exhausted.
+                    CompletableFuture<String> failed = new CompletableFuture<>();
+                    failed.completeExceptionally(new RuntimeException(
+                            "Gemini API error " + status + " on all models: " + preview(response.body())));
+                    return failed;
                 }
+
                 if (status < 200 || status >= 300) {
                     CompletableFuture<String> failed = new CompletableFuture<>();
                     failed.completeExceptionally(new RuntimeException(
@@ -164,6 +204,7 @@ public final class GeminiClient {
                             + preview(response.body())));
                     return failed;
                 }
+
                 return CompletableFuture.completedFuture(extractText(response.body()));
             });
     }

@@ -5,14 +5,11 @@ import com.rayyan.tesseract.paste.BuildPlan;
 import com.rayyan.tesseract.selection.Selection;
 import net.minecraft.block.Block;
 import net.minecraft.block.BlockState;
-import net.minecraft.block.Blocks;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.text.Text;
-import net.minecraft.util.Identifier;
 import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.registry.Registry;
 
 import java.util.List;
 import java.util.Map;
@@ -186,17 +183,6 @@ public final class BuildQueueManager {
 	}
 
 	private static BlockState toBlockState(String blockId) {
-		if (blockId == null || blockId.isBlank()) {
-			return null;
-		}
-		Identifier identifier = Identifier.tryParse(blockId);
-		if (identifier == null) {
-			return null;
-		}
-		Block block = Registry.BLOCK.get(identifier);
-		if (block == Blocks.AIR) {
-			return null;
-		}
-		return block.getDefaultState();
+		return com.rayyan.tesseract.agent.PlacementAgent.toBlockState(blockId);
 	}
 }
