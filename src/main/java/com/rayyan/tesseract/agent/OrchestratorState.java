@@ -7,9 +7,9 @@ package com.rayyan.tesseract.agent;
  *   IDLE → INTERPRETING
  *   INTERPRETING → PLANNING
  *   PLANNING → GENERATING
- *   GENERATING → CRITIQUING
+ *   GENERATING → CRITIQUING  (critic passed)
+ *   GENERATING → GENERATING  (critic failed, retry same component)
  *   CRITIQUING → PLACING
- *   CRITIQUING → GENERATING  (retry)
  *   PLACING → GENERATING     (next component)
  *   PLACING → COMPLETE
  *   any → FAILED
@@ -34,8 +34,8 @@ public enum OrchestratorState {
             case IDLE        -> to == INTERPRETING;
             case INTERPRETING -> to == PLANNING;
             case PLANNING    -> to == GENERATING;
-            case GENERATING  -> to == CRITIQUING;
-            case CRITIQUING  -> to == PLACING || to == GENERATING; // GENERATING = retry
+            case GENERATING  -> to == CRITIQUING || to == GENERATING; // GENERATING = retry
+            case CRITIQUING  -> to == PLACING;
             case PLACING     -> to == GENERATING || to == COMPLETE; // GENERATING = next component
             case COMPLETE, FAILED -> false; // terminal states — no exit
         };
