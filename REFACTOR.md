@@ -27,7 +27,7 @@ The input and output of the system are unchanged: player types a prompt, blocks 
 
 ## Progress Tracker
 
-- [ ] **Step 1** — Remove Gumloop, build Gemini client
+- [x] **Step 1** — Remove Gumloop, build Gemini client
 - [ ] **Step 2** — Define BuildState and event system
 - [ ] **Step 3** — Build the Orchestrator and state machine
 - [ ] **Step 4** — Build InterpretationAgent
@@ -46,29 +46,29 @@ Remove all Gumloop infrastructure from both the Java mod and the Python web serv
 
 ### 1.1 — Delete Gumloop files from the Java mod
 
-- [ ] Delete `src/main/java/com/rayyan/tesseract/gumloop/GumloopClient.java`
-- [ ] Delete `src/main/java/com/rayyan/tesseract/gumloop/GumloopPayload.java`
-- [ ] Delete `src/main/java/com/rayyan/tesseract/gumloop/GumloopProgressManager.java`
-- [ ] Remove all `import com.rayyan.tesseract.gumloop.*` references from `TesseractMod.java` and `PlanPasteClient.java`
-- [ ] Remove all `GUMLOOP_WEBHOOK_URL` references from the Java codebase
+- [x] Delete `src/main/java/com/rayyan/tesseract/gumloop/GumloopClient.java`
+- [ ] Delete `src/main/java/com/rayyan/tesseract/gumloop/GumloopPayload.java` *(kept — still used by BuildQueueManager/PlanPasteClient; superseded in Step 2)*
+- [x] Delete `src/main/java/com/rayyan/tesseract/gumloop/GumloopProgressManager.java`
+- [x] Remove all `import com.rayyan.tesseract.gumloop.*` references from `TesseractMod.java` and `PlanPasteClient.java`
+- [x] Remove all `GUMLOOP_WEBHOOK_URL` references from the Java codebase
 
 ### 1.2 — Create `GeminiClient.java`
 
 Create `src/main/java/com/rayyan/tesseract/api/GeminiClient.java`:
 
-- [ ] Reads `GEMINI_API_KEY` from environment at construction time; throws `IllegalStateException` clearly if missing
-- [ ] Exposes method: `String complete(String systemPrompt, String userPrompt)` — makes a POST to `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent`, returns the raw text of the first candidate
-- [ ] Exposes overload: `String complete(String systemPrompt, String userPrompt, byte[] imageBytes, String mimeType)` — same call but adds an `inlineData` part to the `contents` array for multimodal requests; used by InterpretationAgent when a reference image is present
-- [ ] Uses the same `java.net.http.HttpClient` already in the codebase; Gson for JSON; 30-second timeout
+- [x] Reads `GEMINI_API_KEY` from environment at construction time; throws `IllegalStateException` clearly if missing
+- [x] Exposes method: `String complete(String systemPrompt, String userPrompt)` — makes a POST to `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent`, returns the raw text of the first candidate
+- [x] Exposes overload: `String complete(String systemPrompt, String userPrompt, byte[] imageBytes, String mimeType)` — same call but adds an `inlineData` part to the `contents` array for multimodal requests; used by InterpretationAgent when a reference image is present
+- [x] Uses the same `java.net.http.HttpClient` already in the codebase; Gson for JSON; 30-second timeout
 
 ### 1.3 — Rip Gumloop out of `web/server.py` and wire Gemini in
 
 The Python web server (`web/server.py`) is the other place Gumloop lives. The web flow is: dashboard → `server.py` → Gumloop → plan JSON → POST to plan store at `localhost:4890/plans` → returns URL → dashboard shows URL → user runs `/tesseract paste <url>` in Minecraft.
 
-- [ ] Remove `GUMLOOP_WEBHOOK_URL`, `poll_gumloop_for_plan()`, and `find_plan()` from `server.py`
-- [ ] In `do_POST /generate`: replace the Gumloop HTTP call with a direct call to the Java mod's new embedded HTTP endpoint `POST http://localhost:4890/build` (added in Step 9), sending `{ "prompt": "...", "imageBase64": "...", "imageMimeType": "..." }` — the Java mod runs the full agent pipeline and returns `{ "url": "http://localhost:4890/plans/{id}" }`
-- [ ] Handle the image: the frontend already sends `images` as an array of `{ name, dataUrl }` objects where `dataUrl` is a base64 data URL; in `server.py`, extract the base64 payload by stripping the `data:image/...;base64,` prefix from `images[0].dataUrl` before forwarding
-- [ ] Add `GEMINI_API_KEY` to the environment variable documentation in `demoday.md`; remove `GUMLOOP_WEBHOOK_URL` from the same file
+- [x] Remove `GUMLOOP_WEBHOOK_URL`, `poll_gumloop_for_plan()`, and `find_plan()` from `server.py`
+- [x] In `do_POST /generate`: replace the Gumloop HTTP call with a direct call to the Java mod's new embedded HTTP endpoint `POST http://localhost:4890/build` (added in Step 9), sending `{ "prompt": "...", "imageBase64": "...", "imageMimeType": "..." }` — the Java mod runs the full agent pipeline and returns `{ "url": "http://localhost:4890/plans/{id}" }`
+- [x] Handle the image: the frontend already sends `images` as an array of `{ name, dataUrl }` objects where `dataUrl` is a base64 data URL; in `server.py`, extract the base64 payload by stripping the `data:image/...;base64,` prefix from `images[0].dataUrl` before forwarding
+- [x] Add `GEMINI_API_KEY` to the environment variable documentation in `demoday.md`; remove `GUMLOOP_WEBHOOK_URL` from the same file
 - [ ] Smoke-test: `curl -X POST http://localhost:5173/generate -d '{"prompt":"test"}'` should hit the Java mod endpoint and not crash (even if the mod isn't running yet, the error message should be "connection refused" not "GUMLOOP_WEBHOOK_URL not set")
 
 ---
