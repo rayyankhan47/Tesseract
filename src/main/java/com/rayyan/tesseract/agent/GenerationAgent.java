@@ -27,6 +27,85 @@ public final class GenerationAgent {
     private static final Logger LOGGER = LoggerFactory.getLogger("tesseract.generation");
     static final int MAX_RETRIES = 3;
 
+    // -------------------------------------------------------------------------
+    // Prompts and output schema
+    // -------------------------------------------------------------------------
+
+    /**
+     * Output schema — a flat JSON array of block ops with coordinates relative
+     * to the component's origin (NOT world coordinates):
+     * [
+     *   { "x": 0, "y": 0, "z": 0, "block": "minecraft:stone_bricks" },
+     *   { "x": 1, "y": 0, "z": 0, "block": "minecraft:stone_bricks" }
+     * ]
+     */
+    static final String SYSTEM_PROMPT =
+        "You are the Generation Agent for a Minecraft building assistant.\n" +
+        "Your ONLY job is to generate the exact block placements for ONE named structural component.\n" +
+        "\n" +
+        "Respond with ONLY a valid JSON array — no markdown fences, no prose, no explanation.\n" +
+        "\n" +
+        "Each element in the array must have exactly this schema:\n" +
+        "{ \"x\": integer, \"y\": integer, \"z\": integer, \"block\": string }\n" +
+        "\n" +
+        "Rules:\n" +
+        "- Coordinates are relative to THIS component's origin — start from (0, 0, 0).\n" +
+        "- Use ONLY block IDs from the provided materials list (full 'minecraft:' form).\n" +
+        "- Every block must be at a valid coordinate within the component's bounding box.\n" +
+        "- Build structurally — walls need foundations, roofs need walls, etc.\n" +
+        "- Do NOT place blocks outside the component's bounding box dimensions.\n" +
+        "- Do NOT use 'minecraft:air' for intentional gaps — just omit those positions.\n" +
+        "- Stay within the max block budget given in context.\n" +
+        "IMPORTANT: Respond with ONLY the JSON array. No other text whatsoever.";
+
+    static String buildUserPrompt(ComponentPlan component, BuildSpec spec,
+                                   List<ComponentPlan> allComponents,
+                                   String priorFailureReason) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("Component to generate:\n");
+        sb.append("  Name: ").append(component.name).append("\n");
+        sb.append("  Description: ").append(component.description).append("\n");
+        sb.append("  Bounding box: ").append(component.sizeX).append("×")
+          .append(component.sizeY).append("×").append(component.sizeZ).append(" blocks\n");
+        sb.append("  Origin within build: (").append(component.originX).append(", ")
+          .append(component.originY).append(", ").append(component.originZ).append(")\n");
+
+        sb.append("\nAvailable block IDs (use ONLY these):\n");
+        List<String> palette = buildFullPaletteFromSpec(spec);
+        for (String id : palette) {
+            sb.append("  ").append(id).append("\n");
+        }
+
+        sb.append("\nMax blocks for this component: ").append(component.sizeX * component.sizeY * component.sizeZ);
+
+        if (allComponents != null && allComponents.size() > 1) {
+            sb.append("\n\nOther components in this build (for spatial context — do not place blocks meant for them):\n");
+            for (ComponentPlan other : allComponents) {
+                if (!other.id.equals(component.id)) {
+                    sb.append("  ").append(other.name).append(": ").append(other.description).append("\n");
+                }
+            }
+        }
+
+        if (priorFailureReason != null) {
+            sb.append("\n\nPrevious attempt was rejected — fix this issue:\n  ").append(priorFailureReason);
+        }
+
+        sb.append("\n\nReturn only the JSON array of block placements.");
+        return sb.toString();
+    }
+
+    private static List<String> buildFullPaletteFromSpec(BuildSpec spec) {
+        List<String> safe = defaultPalette();
+        if (spec == null || spec.materials == null) return safe;
+        java.util.List<String> combined = new java.util.ArrayList<>(safe);
+        for (String mat : spec.materials) {
+            String full = mat.contains(":") ? mat : "minecraft:" + mat;
+            if (!combined.contains(full)) combined.add(full);
+        }
+        return java.util.Collections.unmodifiableList(combined);
+    }
+
     private GenerationAgent() {}
 
     // -------------------------------------------------------------------------

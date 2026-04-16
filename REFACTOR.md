@@ -207,15 +207,15 @@ Iterates through the component list one at a time. For each component, makes one
 
 ### 6.2 — Define the per-component prompt and output schema
 
-- [ ] Output schema: a flat JSON array of block ops, coordinates relative to the component's origin:
+- [x] Output schema: a flat JSON array of block ops, coordinates relative to the component's origin:
   ```json
   [
     { "x": 0, "y": 0, "z": 0, "block": "minecraft:stone_bricks" },
     { "x": 1, "y": 0, "z": 0, "block": "minecraft:stone_bricks" }
   ]
   ```
-- [ ] User prompt template: `"Component: {name}\nDescription: {description}\nOrigin in build: ({originX}, {originY}, {originZ})\nAvailable materials: {materials}\nMax blocks for this component: {budget}\nOther component bounding boxes (do not place blocks inside these): [{...}]\nReturn only the JSON array of block placements. Coordinates are relative to this component's origin."`
-- [ ] System prompt: you are a Minecraft block-level generator; return only a JSON array; use only block IDs from the provided materials list; every block must be at a valid coordinate relative to the component origin
+- [x] User prompt template: `"Component: {name}\nDescription: {description}\nOrigin in build: ({originX}, {originY}, {originZ})\nAvailable materials: {materials}\nMax blocks for this component: {budget}\nOther component bounding boxes (do not place blocks inside these): [{...}]\nReturn only the JSON array of block placements. Coordinates are relative to this component's origin."`
+- [x] System prompt: you are a Minecraft block-level generator; return only a JSON array; use only block IDs from the provided materials list; every block must be at a valid coordinate relative to the component origin
 
 ### 6.3 — Create `GenerationAgent.java`
 
