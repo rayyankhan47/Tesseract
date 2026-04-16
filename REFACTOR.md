@@ -29,7 +29,7 @@ The input and output of the system are unchanged: player types a prompt, blocks 
 
 - [x] **Step 1** — Remove Gumloop, build Gemini client
 - [x] **Step 2** — Define BuildState and event system
-- [ ] **Step 3** — Build the Orchestrator and state machine
+- [x] **Step 3** — Build the Orchestrator and state machine
 - [ ] **Step 4** — Build InterpretationAgent
 - [ ] **Step 5** — Build PlanningAgent
 - [ ] **Step 6** — Build GenerationAgent
@@ -107,22 +107,22 @@ The Orchestrator owns the pipeline. It drives the state machine, invokes agents 
 
 Create `src/main/java/com/rayyan/tesseract/agent/OrchestratorState.java`:
 
-- [ ] Enum values: `IDLE, INTERPRETING, PLANNING, GENERATING, CRITIQUING, PLACING, COMPLETE, FAILED`
-- [ ] Static method `assertTransition(OrchestratorState from, OrchestratorState to)` — throws `IllegalStateException` with a descriptive message if the transition is not in the allowed set: `IDLE→INTERPRETING`, `INTERPRETING→PLANNING`, `PLANNING→GENERATING`, `GENERATING→CRITIQUING`, `CRITIQUING→PLACING`, `CRITIQUING→GENERATING` (retry), `PLACING→GENERATING` (next component), `PLACING→COMPLETE`, `any→FAILED`
+- [x] Enum values: `IDLE, INTERPRETING, PLANNING, GENERATING, CRITIQUING, PLACING, COMPLETE, FAILED`
+- [x] Static method `assertTransition(OrchestratorState from, OrchestratorState to)` — throws `IllegalStateException` with a descriptive message if the transition is not in the allowed set: `IDLE→INTERPRETING`, `INTERPRETING→PLANNING`, `PLANNING→GENERATING`, `GENERATING→CRITIQUING`, `CRITIQUING→PLACING`, `CRITIQUING→GENERATING` (retry), `PLACING→GENERATING` (next component), `PLACING→COMPLETE`, `any→FAILED`
 
 ### 3.2 — Create `Orchestrator.java`
 
 Create `src/main/java/com/rayyan/tesseract/agent/Orchestrator.java`:
 
-- [ ] Entry point: `void run(ServerPlayerEntity player, Selection selection, String prompt)` — creates a fresh `BuildState`, stores it keyed by `player.getUuid()` in a `ConcurrentHashMap`, then calls `transition(state, INTERPRETING)`
-- [ ] `void transition(BuildState state, OrchestratorState next)` — calls `OrchestratorState.assertTransition(state.state, next)`, sets `state.state = next`, emits a `BuildEvent`, then dispatches to the correct agent method
-- [ ] Each agent invocation is async (`CompletableFuture`), and on completion calls `transition(...)` for the next state — this keeps the chain non-blocking exactly like the existing `whenComplete` pattern
-- [ ] Public method `void cancelBuild(UUID playerId)` — sets state to `FAILED`, emits an event, cleans up the map entry
+- [x] Entry point: `void run(ServerPlayerEntity player, Selection selection, String prompt)` — creates a fresh `BuildState`, stores it keyed by `player.getUuid()` in a `ConcurrentHashMap`, then calls `transition(state, INTERPRETING)`
+- [x] `void transition(BuildState state, OrchestratorState next)` — calls `OrchestratorState.assertTransition(state.state, next)`, sets `state.state = next`, emits a `BuildEvent`, then dispatches to the correct agent method
+- [x] Each agent invocation is async (`CompletableFuture`), and on completion calls `transition(...)` for the next state — this keeps the chain non-blocking exactly like the existing `whenComplete` pattern
+- [x] Public method `void cancelBuild(UUID playerId)` — sets state to `FAILED`, emits an event, cleans up the map entry
 
 ### 3.3 — Event forwarding
 
-- [ ] `void emit(BuildState state, String agentName, String message)` — appends a `BuildEvent` to `state.eventLog`, then if `player` is still online, calls `player.sendMessage(Text.of("[" + agentName + "] " + message), false)`
-- [ ] Replace `GumloopProgressManager` with `AgentProgressManager` that shows the boss bar during `INTERPRETING`, `PLANNING`, and `GENERATING` states and hides it on `COMPLETE` or `FAILED` — same triangle-wave animation, same purple bar
+- [x] `void emit(BuildState state, String agentName, String message)` — appends a `BuildEvent` to `state.eventLog`, then if `player` is still online, calls `player.sendMessage(Text.of("[" + agentName + "] " + message), false)`
+- [x] Replace `GumloopProgressManager` with `AgentProgressManager` that shows the boss bar during `INTERPRETING`, `PLANNING`, and `GENERATING` states and hides it on `COMPLETE` or `FAILED` — same triangle-wave animation, same purple bar
 
 ---
 
