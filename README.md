@@ -1,20 +1,42 @@
 # Tesseract
 
-A Fabric mod for Minecraft 1.18.2. Select a region, describe what you want in plain English, and the structure appears block by block.
+A Fabric mod for Minecraft 1.18.2. Describe a structure in plain English and it gets built block by block in the world.
 
-## How it works
+```
+/tesseract build "gothic stone gate with twin towers"
+```
 
-A player types `/tesseract build <prompt>`. The mod runs a five-stage agent pipeline backed by Gemini 2.0 Flash:
+## Architecture
 
-1. **InterpretationAgent** — reads the prompt (and optional reference image) and outputs a structured spec: style, type, dimensions, materials, features.
-2. **PlanningAgent** — decomposes the spec into an ordered list of named components with dependency relationships.
-3. **GenerationAgent** — calls Gemini once per component with a focused prompt, producing a flat array of block coordinates relative to that component's origin. Retries up to 3 times if the critic rejects the output.
-4. **CriticAgent** — validates each component: checks for empty output, palette violations, out-of-bounds coordinates, floating blocks (>10% threshold), and budget overrun. No LLM involved.
-5. **PlacementAgent** — translates component-relative coordinates to world coordinates and places blocks at 20 per tick using the existing throttled queue.
+A player prompt goes through a multi-agent pipeline backed by Gemini. Each agent has one job. All share a `BuildState` object. No agent calls another directly. An `Orchestrator` singleton drives a strict state machine and handles all sequencing and error routing.
 
-All five agents share a `BuildState` object. No agent calls another directly. An `Orchestrator` singleton owns the state machine (`IDLE -> INTERPRETING -> PLANNING -> GENERATING -> CRITIQUING -> PLACING -> COMPLETE`) and all transitions. All LLM calls are async (`CompletableFuture`) so the server thread is never blocked.
+```
+InterpretationAgent    prompt -> BuildSpec (style, dimensions, materials, features)
+BlueprintPlanningAgent BuildSpec -> Blueprint DSL (semantic primitives: walls, roof, columns...)
+BlueprintCompiler      Blueprint -> List<BlockOp>  [deterministic, no LLM]
+IsoRenderer            List<BlockOp> -> PNG         [deterministic, no LLM]
+VisualCriticAgent      PNG + Blueprint -> Critique + patch list
+BlueprintPatcher       applies patches -> revised Blueprint -> loop back to Compiler (up to 3x)
+DetailAgent            adds torches, trim, decoration ops
+PlacementAgent         places blocks at 20/tick via BuildQueueManager
+```
 
-There is also a web path: an embedded HTTP server on port 4891 accepts `POST /build` from the web dashboard, runs the same pipeline without a live player, and returns the plan JSON for storage in the plan registry.
+The key design decision is that the LLM never emits block coordinates directly. It emits a **Blueprint DSL** — structured JSON describing a building as semantic primitives (`platform`, `walls`, `gable_roof`, `column`, `arch`, etc.). A deterministic Java compiler expands those into exact block ops. Spatial coherence is enforced by the compiler, not the model.
+
+The **vision critic loop** renders the compiled build as an isometric PNG before any blocks are placed in the world, sends it to Gemini Vision, and iterates on the blueprint based on the critique. Nothing touches the world until the loop converges or hits the 3-iteration cap.
+
+State machine:
+
+```
+IDLE -> INTERPRETING -> BLUEPRINTING -> COMPILING -> RENDERING -> CRITIQUING_VISUAL
+                                             ^                            |
+                                             |______ PATCHING <__________|
+                                                     (if !satisfied)
+                                                         |
+                                                    DETAILING -> PLACING -> COMPLETE
+```
+
+All LLM calls are async (`CompletableFuture`). Callbacks re-enter the Minecraft server thread via `server.execute()` before touching world state.
 
 ## Setup
 
@@ -22,7 +44,7 @@ There is also a web path: an embedded HTTP server on port 4891 accepts `POST /bu
 
 **1. Add your Gemini API key.**
 
-Create a `.env` file in the project root (same folder as `build.gradle`):
+Create `.env` in the project root:
 
 ```
 GEMINI_API_KEY=your_key_here
@@ -31,60 +53,67 @@ GEMINI_API_KEY=your_key_here
 **2. Start three services** (three terminals):
 
 ```bash
-# Terminal 1: plan store (port 4890)
+# Terminal 1 — plan store (port 4890)
 python3 tools/plan_server.py
 
-# Terminal 2: web dashboard (port 5173)
+# Terminal 2 — web dashboard (port 5173)
 cd web && python3 server.py
 
-# Terminal 3: Minecraft mod
+# Terminal 3 — Minecraft server/client
 export JAVA_HOME=$(/usr/libexec/java_home -v 17)
 export PATH="$JAVA_HOME/bin:$PATH"
 GRADLE_USER_HOME=/path/to/.gradle-jdk17 ./gradlew runClient
 ```
 
-## In-game usage
+To dump isometric renders to disk for debugging:
 
-**Build path:**
-1. Right-click two corners with a wooden axe to define the build region.
+```bash
+./gradlew runClient -Dtesseract.debug.renders=true
+# renders saved to run/tesseract_debug/
+```
+
+## Usage
+
+**In-game build:**
+1. Punch the ground with a wooden axe to set the build anchor.
 2. Run `/tesseract build <prompt>`.
-3. Watch the agents log each stage to your chat in real time.
+3. Agent progress is logged to in-game chat in real time.
 
-**Paste path (web dashboard):**
+**Web dashboard:**
 1. Open `http://localhost:5173`, enter a prompt, optionally attach a reference image.
-2. Click Generate. Copy the URL it returns.
-3. Select a region in-game, run `/tesseract paste <url>`.
+2. Click Generate. Copy the returned URL.
+3. Run `/tesseract paste <url>` in-game with a region selected.
 
-**Demo shortcuts:** `/tesseract demo cabin` and `/tesseract demo gate` run preset prompts through the full pipeline.
-
-## Ports
-
-| Port | Service |
-|------|---------|
-| 4890 | `tools/plan_server.py` — plan store |
-| 4891 | Java mod — agent pipeline (`POST /build`) |
-| 5173 | `web/server.py` — dashboard UI |
+**Shortcuts:** `/tesseract demo cabin` and `/tesseract demo gate` run preset prompts.
 
 ## Project structure
 
 ```
 src/main/java/com/rayyan/tesseract/
-  agent/          Orchestrator, state machine, all five agents, shared data model
-  api/            GeminiClient (direct Gemini REST, text + multimodal)
-  jobs/           BuildJobManager, BuildQueueManager (throttled placement)
-  paste/          PlanPasteClient (paste command)
-  selection/      Region selection (wooden axe / golden axe)
+  agent/       Orchestrator, state machine, all agents, BuildState
+  blueprint/   Blueprint DSL data classes, parser, compiler, patcher, palette utils
+  render/      IsoRenderer, BlockColorPalette
+  api/         GeminiClient (text + multimodal)
+  jobs/        BuildJobManager, BuildQueueManager (throttled placement)
+  paste/       PlanPasteClient
+  selection/   Region selection (wooden axe / golden axe)
   TesseractMod.java
 tools/
-  plan_server.py  Stores plans, returns shareable URLs
+  plan_server.py
 web/
-  server.py       Dashboard backend, bridges browser to Java mod
-  index.html / app.js / styles.css
+  server.py / index.html / app.js / styles.css
 ```
+
+## Ports
+
+| Port | Service |
+|------|---------|
+| 4890 | plan store |
+| 4891 | mod HTTP endpoint (`POST /build`) |
+| 5173 | web dashboard |
 
 ## Constraints
 
 - Minecraft 1.18.2 only
-- Max region size: 32x32x32
-- Block palette: 17 curated block types (stone, oak, bricks, glass, torches, etc.)
-- One concurrent web build at a time
+- One concurrent build per player, one concurrent web build
+- Vision critic loop: max 3 iterations, 90-second wall-clock budget
