@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    width: 1280px; height: 720px;
+    background: #ffffff;
+    color: #24292f;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    overflow: hidden;
+  }
+
+  .slide {
+    width: 1280px; height: 720px;
+    display: flex;
+    flex-direction: column;
+    padding: 52px 64px 44px;
+  }
+
+  .header {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 40px;
+    flex-shrink: 0;
+  }
+  .tag {
+    background: #f6f8fa;
+    border: 1px solid #d0d7de;
+    color: #57606a;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 3px 9px;
+    border-radius: 4px;
+  }
+  .title {
+    font-size: 26px;
+    font-weight: 700;
+    color: #24292f;
+    letter-spacing: -0.02em;
+  }
+
+  /* body: pipeline left, cards right */
+  .body {
+    display: flex;
+    gap: 40px;
+    flex: 1;
+    min-height: 0;
+  }
+
+  /* ---- Pipeline ---- */
+  .pipeline-col {
+    position: relative;
+    flex-shrink: 0;
+    width: 680px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+
+  .row {
+    display: flex;
+    align-items: center;
+  }
+
+  .arrow {
+    color: #57606a;
+    font-size: 18px;
+    padding: 0 6px;
+    flex-shrink: 0;
+  }
+
+  /* base node */
+  .node {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+    padding: 10px 14px;
+    text-align: center;
+    flex-shrink: 0;
+  }
+  .n-label {
+    font-size: 12px;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+  .n-sub {
+    font-size: 10.5px;
+    margin-top: 3px;
+    font-family: 'SF Mono', 'Consolas', monospace;
+    white-space: nowrap;
+  }
+
+  /* LLM node: blue */
+  .llm {
+    background: #ddf4ff;
+    border: 1px solid #54aeff;
+    min-width: 116px;
+  }
+  .llm .n-label { color: #0969da; }
+  .llm .n-sub   { color: #0550ae; }
+
+  /* deterministic node: gray */
+  .det {
+    background: #f6f8fa;
+    border: 1px solid #d0d7de;
+    min-width: 116px;
+    position: relative;
+  }
+  .det .n-label { color: #57606a; }
+  .det .n-sub   { color: #8c959f; }
+
+  /* critic node: purple */
+  .critic {
+    background: #fbefff;
+    border: 1px solid #bf8efc;
+    min-width: 130px;
+  }
+  .critic .n-label { color: #8250df; }
+  .critic .n-sub   { color: #a475f9; }
+
+  /* output node: green */
+  .out {
+    background: #dafbe1;
+    border: 1px solid #2da44e;
+    min-width: 116px;
+  }
+  .out .n-label { color: #1a7f37; }
+  .out .n-sub   { color: #2da44e; }
+
+  /* "no llm" badge */
+  .badge {
+    position: absolute;
+    top: -9px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #ffffff;
+    border: 1px solid #d0d7de;
+    color: #8c959f;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    padding: 1px 6px;
+    border-radius: 99px;
+    white-space: nowrap;
+    text-transform: uppercase;
+  }
+
+  /* ---- Cards ---- */
+  .cards-col {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    justify-content: center;
+  }
+
+  .card {
+    background: #f6f8fa;
+    border: 1px solid #d0d7de;
+    border-radius: 6px;
+    padding: 14px 16px;
+  }
+
+  .card-title {
+    font-size: 11.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    margin-bottom: 6px;
+    color: #24292f;
+  }
+  .card-body {
+    font-size: 12px;
+    color: #57606a;
+    line-height: 1.55;
+  }
+  .card-body strong { color: #24292f; }
+</style>
+</head>
+<body>
+<div class="slide">
+
+  <div class="header">
+    <span class="tag">v2</span>
+    <span class="title">Blueprint DSL + Agentic Vision Loop</span>
+  </div>
+
+  <div class="body">
+
+    <!-- Pipeline -->
+    <div class="pipeline-col" id="pcol">
+
+      <!-- Row 1 -->
+      <div class="row" id="row1">
+        <div class="node llm" id="n-interp">
+          <div class="n-label">Interpret</div>
+          <div class="n-sub">prompt → BuildSpec</div>
+        </div>
+        <div class="arrow">→</div>
+
+        <div class="node llm" id="n-plan">
+          <div class="n-label">Plan Blueprint</div>
+          <div class="n-sub">BuildSpec → DSL JSON</div>
+        </div>
+        <div class="arrow">→</div>
+
+        <div class="node det" id="n-compile">
+          <span class="badge">no llm</span>
+          <div class="n-label">Compile</div>
+          <div class="n-sub">DSL → BlockOps</div>
+        </div>
+        <div class="arrow">→</div>
+
+        <div class="node det" id="n-render">
+          <span class="badge">no llm</span>
+          <div class="n-label">Render</div>
+          <div class="n-sub">BlockOps → PNG</div>
+        </div>
+      </div>
+
+      <!-- Arc zone: critic + SVG loop arrow -->
+      <div style="position:relative; height:96px; width:100%;">
+        <svg style="position:absolute;top:0;left:0;" width="680" height="96">
+          <!--
+            Arc: starts below Render (~x=556), curves down-right to bottom,
+            runs left across the bottom (passing through Critic at ~x=340),
+            then curves up to arrive at Compile center (~x=404) pointing straight up.
+            The last control point (404,70) shares the same x as the endpoint (404,14)
+            so the tangent at the endpoint is purely vertical — arrowhead points straight up.
+          -->
+          <path d="M 556,4 C 592,4 598,82 558,88 L 188,88 C 210,88 404,70 404,14"
+                stroke="#8250df" stroke-width="1.5" stroke-dasharray="5,3"
+                fill="none"/>
+          <!-- Explicit upward-pointing arrowhead at Compile center -->
+          <polygon points="397,14 404,1 411,14" fill="#8250df"/>
+          <text x="390" y="80" text-anchor="middle"
+                fill="#8250df" font-size="10" font-family="sans-serif" font-weight="600">
+            patch + recompile (up to 3x)
+          </text>
+        </svg>
+
+        <!-- Vision Critic sits below arc midpoint -->
+        <div class="node critic"
+             style="position:absolute; bottom:4px; left:50%; transform:translateX(-50%);">
+          <div class="n-label">Vision Critic</div>
+          <div class="n-sub">Gemini Vision: PNG → patch list</div>
+        </div>
+      </div>
+
+      <!-- Down arrow from critic to row2 -->
+      <div style="position:relative; height:20px;">
+        <svg style="position:absolute;left:50%;transform:translateX(-50%);" width="20" height="20">
+          <line x1="10" y1="0" x2="10" y2="14" stroke="#57606a" stroke-width="1.5"/>
+          <polygon points="5,10 10,20 15,10" fill="#57606a"/>
+        </svg>
+      </div>
+
+      <!-- Row 2 -->
+      <div class="row" id="row2" style="justify-content:center;">
+        <div class="node llm" id="n-detail">
+          <div class="n-label">Detail Agent</div>
+          <div class="n-sub">adds torches, trim</div>
+        </div>
+        <div class="arrow">→</div>
+
+        <div class="node out" id="n-place">
+          <div class="n-label">Place in World</div>
+          <div class="n-sub">20 blocks / tick</div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Cards -->
+    <div class="cards-col">
+
+      <div class="card">
+        <div class="card-title">LLM writes semantics, not coordinates</div>
+        <div class="card-body">
+          The planner outputs a <strong>Blueprint DSL</strong>: semantic primitives like
+          <strong>platform</strong>, <strong>walls</strong>, <strong>gable_roof</strong>.
+          A deterministic Java compiler expands these into exact block coordinates.
+          Spatial coherence is enforced by code, not guessed by the model.
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Renders the build before placing it</div>
+        <div class="card-body">
+          The compiler runs in memory. An isometric PNG is generated from the block ops
+          and sent to <strong>Gemini Vision.</strong> It critiques the image and returns
+          a structured patch list. The blueprint is revised and recompiled.
+          <strong>Nothing touches the world until the loop converges.</strong>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Strict state machine, shared data context</div>
+        <div class="card-body">
+          Every agent reads and writes a single <strong>BuildState</strong> object.
+          The <strong>Orchestrator</strong> drives a state machine with explicit legal transitions.
+          No agent calls another directly. Any failure routes cleanly to FAILED.
+        </div>
+      </div>
+
+    </div>
+
+  </div>
+</div>
+</body>
+</html>
