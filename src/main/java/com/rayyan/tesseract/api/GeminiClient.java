@@ -175,11 +175,49 @@ public final class GeminiClient {
                                                        String systemPrompt,
                                                        String userPrompt,
                                                        List<ImagePart> images) {
+        return completeWithModel(modelId, systemPrompt, userPrompt, images, null);
+    }
+
+    /**
+     * Pinned-model variant that also sets a {@link GenerationConfig}
+     * (temperature, maxOutputTokens). Used by agents that need fine control
+     * (e.g. {@code MassExtractionAgent} pins temperature 0.2, maxOutputTokens 16k).
+     */
+    public CompletableFuture<String> completeWithModel(String modelId,
+                                                       String systemPrompt,
+                                                       String userPrompt,
+                                                       List<ImagePart> images,
+                                                       GenerationConfig config) {
         if (modelId == null || modelId.isBlank()) {
             throw new IllegalArgumentException("modelId is required");
         }
         JsonObject body = buildMultiImageBody(systemPrompt, userPrompt, images);
+        if (config != null) {
+            body.add("generationConfig", config.toJson());
+        }
         return sendPinned(body, modelId, 0);
+    }
+
+    /**
+     * Subset of the Gemini {@code generationConfig} knobs we actually use.
+     * Fields are nullable — unset values are omitted from the request.
+     */
+    public record GenerationConfig(Double temperature,
+                                   Integer maxOutputTokens,
+                                   Double topP,
+                                   Integer topK) {
+        public static GenerationConfig of(double temperature, int maxOutputTokens) {
+            return new GenerationConfig(temperature, maxOutputTokens, null, null);
+        }
+
+        JsonObject toJson() {
+            JsonObject obj = new JsonObject();
+            if (temperature != null)      obj.addProperty("temperature", temperature);
+            if (maxOutputTokens != null)  obj.addProperty("maxOutputTokens", maxOutputTokens);
+            if (topP != null)             obj.addProperty("topP", topP);
+            if (topK != null)             obj.addProperty("topK", topK);
+            return obj;
+        }
     }
 
     /**

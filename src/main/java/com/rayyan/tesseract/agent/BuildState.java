@@ -43,6 +43,10 @@ public final class BuildState {
     /** Index into {@link #referenceImages} of the Pro-selected primary concept. */
     int selectedConceptIndex;
 
+    // ---- Refactor 3, Phase 1 — 3D mass extraction ----
+    /** 16³ voxel silhouette extracted by {@code MassExtractionAgent}. Null until Phase 1 runs. */
+    VoxelMass massSketch;
+
     // ---- Blueprint DSL pipeline (Refactor 2) ----
     /** Current best Blueprint (updated on each critic patch). Set by BlueprintPlanningAgent. */
     Blueprint blueprint;
