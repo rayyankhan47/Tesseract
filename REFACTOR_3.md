@@ -326,10 +326,10 @@ Legend: [x] complete · [~] in progress · [ ] pending
   - [x] 2.1 MassExtractionAgent
   - [x] 2.2 Mass → Blueprint bounds
   - [x] 2.3 Silhouette critic bootstrap
-- [~] Step 3 — Model Tiering & Fallback Redesign
+- [x] Step 3 — Model Tiering & Fallback Redesign
   - [x] 3.1 Model registry + TaskKind + CostTracker
   - [x] 3.2 Failure-class retry chains
-  - [ ] 3.3 Graceful degradation
+  - [x] 3.3 Graceful degradation
 - [ ] Step 3 — Model Tiering & Fallback Redesign
 - [ ] Step 4 — RAG Architectural Knowledge Base
 - [ ] Step 5 — Hierarchical Decomposition

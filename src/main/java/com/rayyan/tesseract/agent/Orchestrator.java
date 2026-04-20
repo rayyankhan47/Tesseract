@@ -285,10 +285,12 @@ public final class Orchestrator {
                             }
                         }
                     }),
-                    // Critic error — fail soft, proceed with current build
+                    // §3.3.1 — inner-loop critic is optional. On terminal failure
+                    // after retries/escalations, log CRITIC_SKIPPED and proceed
+                    // with the current blueprint instead of aborting.
                     err -> onServerThread(state, () -> {
-                        LOGGER.warn("VisualCritic failed: {} — proceeding with current blueprint", err);
-                        emit(state, "VisualCritic", "Critic error — proceeding: " + err);
+                        LOGGER.warn("CRITIC_SKIPPED task=visual_critic reason={}", err);
+                        emit(state, "VisualCritic", "CRITIC_SKIPPED — proceeding: " + err);
                         finalizeOps(state);
                         transition(state, OrchestratorState.DETAILING);
                     }));
@@ -382,6 +384,22 @@ public final class Orchestrator {
         if (state.webBuildFuture != null) {
             state.webBuildFuture.completeExceptionally(new RuntimeException("Build failed: " + reason));
         }
+    }
+
+    /**
+     * §3.3.3 — when a vision-dependent phase (Imagen concept synthesis, mass
+     * extraction) fails catastrophically, flip the build into text-only mode.
+     * Step 10's orchestrator wiring reads {@link BuildState#textOnlyFallback}
+     * to bypass Phase 0/1 and route straight to the v2 blueprint planner.
+     *
+     * <p>Idempotent — safe to call from multiple agent error paths.
+     */
+    void enterTextOnlyFallback(BuildState state, String reason) {
+        if (state.textOnlyFallback) return;
+        state.textOnlyFallback = true;
+        LOGGER.warn("PHASE_FALLBACK mode=text_only reason={}", reason);
+        emit(state, "Orchestrator",
+                "Visual pipeline unavailable — falling back to text-only blueprinting (" + reason + ")");
     }
 
     /**
