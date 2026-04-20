@@ -331,7 +331,10 @@ Legend: [x] complete · [~] in progress · [ ] pending
   - [x] 3.2 Failure-class retry chains
   - [x] 3.3 Graceful degradation
 - [ ] Step 3 — Model Tiering & Fallback Redesign
-- [ ] Step 4 — RAG Architectural Knowledge Base
+- [~] Step 4 — RAG Architectural Knowledge Base
+  - [x] 4.1 Knowledge corpus
+  - [ ] 4.2 Embedding + retrieval
+  - [ ] 4.3 Injection into planning
 - [ ] Step 5 — Hierarchical Decomposition
 - [ ] Step 6 — Geometric Toolbox & Sandbox
 - [ ] Step 7 — L4 REPL Agent
