@@ -98,8 +98,25 @@ public final class MassExtractionAgent {
                 state.massSketch = mass;
                 LOGGER.info("MassExtractionAgent: mass ready ({} filled voxels @ {}³)",
                         mass.filledCount(), mass.resolution());
+                writeDebugPng(state, mass);
                 onSuccess.run();
             });
+    }
+
+    /**
+     * §2.2.3 — when {@code tesseract.debug.renders} is on, emit an isometric PNG
+     * of the voxel mass alongside the concept dump.
+     */
+    private static void writeDebugPng(BuildState state, VoxelMass mass) {
+        try {
+            com.rayyan.tesseract.blueprint.Blueprint.Bounds bounds =
+                    VoxelMassRenderer.deriveBounds(state.buildSelection);
+            byte[] png = VoxelMassRenderer.renderPng(mass, bounds, 8);
+            VoxelMassRenderer.writeDebugCopy(png, state.playerId == null ? "unknown"
+                    : state.playerId.toString());
+        } catch (Exception e) {
+            LOGGER.warn("MassExtractionAgent: debug PNG render failed: {}", e.getMessage());
+        }
     }
 
     // -------------------------------------------------------------------------
