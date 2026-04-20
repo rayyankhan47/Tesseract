@@ -144,6 +144,55 @@ public final class GeminiClient {
         return send(buildBody(systemPrompt, userPrompt, imageBytes, mimeType));
     }
 
+    /**
+     * Multi-image variant that still uses the {@link #MODELS} fallback chain.
+     *
+     * <p>The first image in {@code images} is treated as the primary focus; any
+     * others should be referenced in the {@code userPrompt} by index
+     * ("image [0] is the current render, image [1] is the concept reference").
+     */
+    public CompletableFuture<String> complete(String systemPrompt, String userPrompt,
+                                               List<ImagePart> images) {
+        return send(buildMultiImageBody(systemPrompt, userPrompt, images));
+    }
+
+    /**
+     * Multi-image multimodal call pinned to a specific model (no fallback chain).
+     *
+     * <p>Used by agents that need a specific model tier (e.g. Gemini 2.5 Pro for
+     * the concept auto-selector). Retries the same model on 5xx; bubbles up the
+     * error on all other non-2xx.
+     *
+     * <p>Step 3 will replace this with a unified {@code call(TaskKind, …)} path;
+     * until then this is the escape hatch.
+     *
+     * @param modelId       fully-qualified model id (e.g. {@code gemini-2.5-pro})
+     * @param systemPrompt  system instruction, may be null
+     * @param userPrompt    text part; always prepended to the parts array
+     * @param images        ordered list of image parts; may be empty or null
+     */
+    public CompletableFuture<String> completeWithModel(String modelId,
+                                                       String systemPrompt,
+                                                       String userPrompt,
+                                                       List<ImagePart> images) {
+        if (modelId == null || modelId.isBlank()) {
+            throw new IllegalArgumentException("modelId is required");
+        }
+        JsonObject body = buildMultiImageBody(systemPrompt, userPrompt, images);
+        return sendPinned(body, modelId, 0);
+    }
+
+    /**
+     * Inline image payload for multimodal calls. Field order matches the
+     * Gemini REST schema: mime type, then base64 bytes.
+     */
+    public record ImagePart(byte[] bytes, String mimeType) {
+        public ImagePart {
+            if (bytes == null) throw new IllegalArgumentException("bytes is required");
+            if (mimeType == null || mimeType.isBlank()) mimeType = "image/png";
+        }
+    }
+
     // -------------------------------------------------------------------------
     // Internal helpers
     // -------------------------------------------------------------------------
@@ -207,6 +256,94 @@ public final class GeminiClient {
 
                 return CompletableFuture.completedFuture(extractText(response.body()));
             });
+    }
+
+    /**
+     * Pinned variant of {@link #sendWithFallback}: uses a single explicit model
+     * and never falls through to any other entry. Retries on 5xx with the same
+     * exponential-backoff schedule.
+     */
+    private CompletableFuture<String> sendPinned(JsonObject body, String modelId, int retryAttempt) {
+        String url = String.format(BASE_URL, modelId) + "?key=" + apiKey;
+        HttpRequest request = HttpRequest.newBuilder()
+            .uri(URI.create(url))
+            .timeout(Duration.ofSeconds(60))
+            .header("Content-Type", "application/json")
+            .POST(HttpRequest.BodyPublishers.ofString(GSON.toJson(body)))
+            .build();
+
+        return HTTP.sendAsync(request, HttpResponse.BodyHandlers.ofString())
+            .thenCompose(response -> {
+                int status = response.statusCode();
+
+                if (status >= 500) {
+                    if (retryAttempt < MAX_RETRIES_PER_MODEL) {
+                        long delayMs = (BASE_RETRY_MS << retryAttempt)
+                                + (long) (RANDOM.nextDouble() * JITTER_MS);
+                        LOGGER.warn("Gemini pinned '{}' returned {} (attempt {}/{}); retrying in {}ms.",
+                                modelId, status, retryAttempt + 1, MAX_RETRIES_PER_MODEL + 1, delayMs);
+                        return CompletableFuture
+                                .runAsync(() -> {}, CompletableFuture.delayedExecutor(delayMs, TimeUnit.MILLISECONDS))
+                                .thenCompose(v -> sendPinned(body, modelId, retryAttempt + 1));
+                    }
+                    CompletableFuture<String> failed = new CompletableFuture<>();
+                    failed.completeExceptionally(new RuntimeException(
+                            "Gemini pinned API error " + status + " (model=" + modelId + "): "
+                            + preview(response.body())));
+                    return failed;
+                }
+
+                if (status < 200 || status >= 300) {
+                    CompletableFuture<String> failed = new CompletableFuture<>();
+                    failed.completeExceptionally(new RuntimeException(
+                            "Gemini pinned API error " + status + " (model=" + modelId + "): "
+                            + preview(response.body())));
+                    return failed;
+                }
+
+                return CompletableFuture.completedFuture(extractText(response.body()));
+            });
+    }
+
+    private static JsonObject buildMultiImageBody(String systemPrompt, String userPrompt,
+                                                  List<ImagePart> images) {
+        JsonObject body = new JsonObject();
+
+        if (systemPrompt != null && !systemPrompt.isBlank()) {
+            JsonObject sysInstr = new JsonObject();
+            JsonArray sysParts = new JsonArray();
+            JsonObject sysPart = new JsonObject();
+            sysPart.addProperty("text", systemPrompt);
+            sysParts.add(sysPart);
+            sysInstr.add("parts", sysParts);
+            body.add("systemInstruction", sysInstr);
+        }
+
+        JsonArray parts = new JsonArray();
+
+        JsonObject textPart = new JsonObject();
+        textPart.addProperty("text", userPrompt == null ? "" : userPrompt);
+        parts.add(textPart);
+
+        if (images != null) {
+            for (ImagePart img : images) {
+                if (img == null || img.bytes() == null) continue;
+                JsonObject inlineData = new JsonObject();
+                inlineData.addProperty("mimeType", img.mimeType());
+                inlineData.addProperty("data", Base64.getEncoder().encodeToString(img.bytes()));
+                JsonObject imagePart = new JsonObject();
+                imagePart.add("inlineData", inlineData);
+                parts.add(imagePart);
+            }
+        }
+
+        JsonObject userContent = new JsonObject();
+        userContent.add("parts", parts);
+        JsonArray contents = new JsonArray();
+        contents.add(userContent);
+        body.add("contents", contents);
+
+        return body;
     }
 
     private static JsonObject buildBody(String systemPrompt, String userPrompt,
