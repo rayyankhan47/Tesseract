@@ -46,6 +46,8 @@ public final class BuildState {
     // ---- Refactor 3, Phase 1 — 3D mass extraction ----
     /** 16³ voxel silhouette extracted by {@code MassExtractionAgent}. Null until Phase 1 runs. */
     VoxelMass massSketch;
+    /** Most recent silhouette drift measurement (§2.3.2); NaN until first compile pass. */
+    double lastSilhouetteDrift = Double.NaN;
 
     // ---- Blueprint DSL pipeline (Refactor 2) ----
     /** Current best Blueprint (updated on each critic patch). Set by BlueprintPlanningAgent. */

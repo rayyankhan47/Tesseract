@@ -196,6 +196,8 @@ public final class Orchestrator {
                         return;
                     }
                     emit(state, "Compiler", state.compiledBlueprint.ops().size() + " block ops compiled.");
+                    // §2.3.2 — silhouette drift after every compile pass.
+                    reportDrift(state);
                     transition(state, OrchestratorState.RENDERING);
                 } catch (BlueprintCompileException e) {
                     failBuild(state, "Blueprint compile error: " + e.getMessage());
@@ -496,6 +498,30 @@ public final class Orchestrator {
 
         LOGGER.info("Synthesised selection {}×{}×{} at origin ({},{},{})",
                 w, h, d, newMin.getX(), newMin.getY(), newMin.getZ());
+    }
+
+    /**
+     * §2.3.2 / §2.3.3 — compute silhouette drift after a compile pass and surface
+     * it to the player. Logs {@code DRIFT_ROLLBACK_REQUESTED} above the hard
+     * threshold; actual L1 rollback wiring lands with Step 5.
+     */
+    private void reportDrift(BuildState state) {
+        if (state.massSketch == null || state.compiledBlueprint == null) return;
+        try {
+            double drift = SilhouetteMetrics.drift(
+                    state.compiledBlueprint.ops(),
+                    state.massSketch,
+                    state.blueprint.bounds);
+            state.lastSilhouetteDrift = drift;
+            String tag = SilhouetteMetrics.classify(drift);
+            String msg = String.format("Silhouette drift: %.1f%% (%s)", drift * 100.0, tag);
+            if (SilhouetteMetrics.shouldRollback(drift)) {
+                msg += " — DRIFT_ROLLBACK_REQUESTED (L1 rollback pending, see Step 5 wiring)";
+            }
+            emit(state, "SilhouetteMetrics", msg);
+        } catch (Exception e) {
+            LOGGER.warn("SilhouetteMetrics: failed to compute drift — {}", e.getMessage());
+        }
     }
 
     private GeminiClient getGemini() {

@@ -322,7 +322,10 @@ Legend: [x] complete · [~] in progress · [ ] pending
   - [x] 1.1 Imagen integration
   - [x] 1.2 ConceptAgent
   - [x] 1.3 Reference infrastructure
-- [ ] Step 2 — 3D Mass Extraction
+- [x] Step 2 — 3D Mass Extraction
+  - [x] 2.1 MassExtractionAgent
+  - [x] 2.2 Mass → Blueprint bounds
+  - [x] 2.3 Silhouette critic bootstrap
 - [ ] Step 3 — Model Tiering & Fallback Redesign
 - [ ] Step 4 — RAG Architectural Knowledge Base
 - [ ] Step 5 — Hierarchical Decomposition

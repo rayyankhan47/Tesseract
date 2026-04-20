@@ -163,6 +163,16 @@ public final class VisualCriticAgent {
             sb.append("(front view on left, back view on right).\n\n");
         }
 
+        // §2.3.1 — co-referenced truth: include the voxel mass sketch (when
+        // available) alongside the concept image so the critic judges the
+        // render against both sources.
+        if (state.massSketch != null) {
+            sb.append("3D MASS SKETCH (the agreed silhouette envelope for this build):\n");
+            sb.append("```\n").append(state.massSketch.toAsciiLayersCompact()).append("```\n");
+            sb.append("Any build geometry that lands outside this silhouette is drift — ");
+            sb.append("flag and patch it toward the envelope.\n\n");
+        }
+
         sb.append("Respond with the JSON critique object.");
         return sb.toString();
     }
