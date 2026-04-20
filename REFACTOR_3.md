@@ -318,10 +318,10 @@ No more tick-drip. Whole build appears at once.
 
 Legend: [x] complete · [~] in progress · [ ] pending
 
-- [~] Step 1 — Concept Synthesis & Visual Grounding
-  - [~] 1.1 Imagen integration
-  - [ ] 1.2 ConceptAgent
-  - [ ] 1.3 Reference infrastructure
+- [x] Step 1 — Concept Synthesis & Visual Grounding
+  - [x] 1.1 Imagen integration
+  - [x] 1.2 ConceptAgent
+  - [x] 1.3 Reference infrastructure
 - [ ] Step 2 — 3D Mass Extraction
 - [ ] Step 3 — Model Tiering & Fallback Redesign
 - [ ] Step 4 — RAG Architectural Knowledge Base

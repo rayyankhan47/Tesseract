@@ -2,6 +2,7 @@ package com.rayyan.tesseract.agent;
 
 import com.google.gson.*;
 import com.rayyan.tesseract.api.GeminiClient;
+import com.rayyan.tesseract.api.GeminiClient.ImagePart;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -103,7 +104,16 @@ public final class VisualCriticAgent {
         String userPrompt = buildUserPrompt(state);
         LOGGER.info("VisualCriticAgent: critiquing '{}' (iter {})", state.blueprint.name, state.iterationCount);
 
-        gemini.complete(SYSTEM_PROMPT, userPrompt, state.lastRenderPng, "image/png")
+        // 1.3.2 — attach the primary concept reference image (if Phase 0 populated it)
+        // alongside the current render so the critic compares against the visual north star.
+        List<ImagePart> images = new ArrayList<>();
+        images.add(new ImagePart(state.lastRenderPng, "image/png"));
+        ReferenceImage primary = primaryReference(state);
+        if (primary != null) {
+            images.add(new ImagePart(primary.bytes(), primary.mimeType()));
+        }
+
+        gemini.complete(SYSTEM_PROMPT, userPrompt, images)
               .whenComplete((raw, ex) -> {
                   if (ex != null) {
                       LOGGER.warn("VisualCriticAgent: Gemini call failed: {}", ex.getMessage());
@@ -138,10 +148,31 @@ public final class VisualCriticAgent {
         }
         sb.append("Current blueprint (").append(state.blueprint.primitives.size())
           .append(" primitives):\n").append(state.blueprint.rawJson).append("\n\n");
-        sb.append("The attached image shows the isometric render of this blueprint ");
-        sb.append("(front view on left, back view on right).\n\n");
-        sb.append("Does this look correct? Respond with the JSON critique object.");
+
+        ReferenceImage primary = primaryReference(state);
+        if (primary != null) {
+            sb.append("Attached images:\n");
+            sb.append("  [0] Isometric render of the CURRENT build (front view left, back view right).\n");
+            sb.append("  [1] CONCEPT REFERENCE image — the visual north star. ");
+            sb.append("Style: ").append(primary.variation() == null ? "n/a" : primary.variation()).append(".\n\n");
+            sb.append("Compare image [0] (current build) to image [1] (concept reference). ");
+            sb.append("Issues should describe how the render fails to match the concept. ");
+            sb.append("Patches should move the blueprint toward image [1].\n\n");
+        } else {
+            sb.append("The attached image shows the isometric render of this blueprint ");
+            sb.append("(front view on left, back view on right).\n\n");
+        }
+
+        sb.append("Respond with the JSON critique object.");
         return sb.toString();
+    }
+
+    /** Returns the primary concept reference image, or null if Phase 0 has not run. */
+    static ReferenceImage primaryReference(BuildState state) {
+        if (state.referenceImages == null || state.referenceImages.isEmpty()) return null;
+        int idx = state.selectedConceptIndex;
+        if (idx < 0 || idx >= state.referenceImages.size()) idx = 0;
+        return state.referenceImages.get(idx);
     }
 
     // -------------------------------------------------------------------------
