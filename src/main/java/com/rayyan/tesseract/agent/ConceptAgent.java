@@ -7,6 +7,7 @@ import com.rayyan.tesseract.api.ConceptPromptTemplate.Variation;
 import com.rayyan.tesseract.api.GeminiClient;
 import com.rayyan.tesseract.api.GeminiClient.ImagePart;
 import com.rayyan.tesseract.api.ImagenClient;
+import com.rayyan.tesseract.api.TaskKind;
 import com.rayyan.tesseract.render.IsoRenderer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -36,11 +37,13 @@ public final class ConceptAgent {
 
     private static final Logger LOGGER = LoggerFactory.getLogger("tesseract.concept");
 
-    /** Model used for the auto-select pass (per REFACTOR_3 §1.2.2). */
-    private static final String SELECTOR_MODEL = "gemini-2.5-pro";
-
     /** Aspect ratio for concept images — fixed to 1:1 for architectural consistency. */
     private static final String CONCEPT_ASPECT = "1:1";
+
+    /** Stricter reminder used by the §3.2.3 escalation chain if selector returns garbage. */
+    private static final String SELECTOR_STRICT_REMINDER =
+            "Return ONLY {\"index\":N} with N as an integer. "
+          + "No prose, no markdown, no keys other than \"index\".";
 
     private ConceptAgent() {}
 
@@ -104,7 +107,7 @@ public final class ConceptAgent {
                     return;
                 }
 
-                selectBest(gemini, prompt, images)
+                selectBest(gemini, state, prompt, images)
                     .whenComplete((selectedIndex, selErr) -> {
                         int index = (selErr != null || selectedIndex == null) ? 0 : clampIndex(selectedIndex, images.size());
                         if (selErr != null) {
@@ -118,6 +121,7 @@ public final class ConceptAgent {
 
     /** 1.2.2 — ask Gemini 2.5 Pro which of N concepts most faithfully matches the prompt. */
     private static CompletableFuture<Integer> selectBest(GeminiClient gemini,
+                                                          BuildState state,
                                                           String userPrompt,
                                                           List<ReferenceImage> images) {
         StringBuilder sb = new StringBuilder();
@@ -140,12 +144,35 @@ public final class ConceptAgent {
             parts.add(new ImagePart(img.bytes(), img.mimeType()));
         }
 
-        return gemini.completeWithModel(
-                SELECTOR_MODEL,
+        return gemini.call(
+                TaskKind.CONCEPT_SELECT,
                 "You are an architectural art director. Be decisive. Return only JSON.",
                 sb.toString(),
-                parts)
+                parts,
+                ConceptAgent::isValidSelectorResponse,
+                SELECTOR_STRICT_REMINDER,
+                state.costTracker)
             .thenApply(ConceptAgent::parseIndex);
+    }
+
+    /** §3.2.3 validator: response must be parseable as {index: int}. */
+    private static boolean isValidSelectorResponse(String raw) {
+        if (raw == null) return false;
+        String trimmed = raw.strip();
+        if (trimmed.isEmpty()) return false;
+        if (trimmed.startsWith("```")) {
+            int firstNl = trimmed.indexOf('\n');
+            if (firstNl > 0) trimmed = trimmed.substring(firstNl + 1);
+            int fenceEnd = trimmed.lastIndexOf("```");
+            if (fenceEnd >= 0) trimmed = trimmed.substring(0, fenceEnd);
+            trimmed = trimmed.strip();
+        }
+        try {
+            JsonObject obj = JsonParser.parseString(trimmed).getAsJsonObject();
+            return obj.has("index");
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     private static int parseIndex(String raw) {

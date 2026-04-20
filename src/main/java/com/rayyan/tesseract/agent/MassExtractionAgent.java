@@ -5,8 +5,8 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.rayyan.tesseract.api.GeminiClient;
-import com.rayyan.tesseract.api.GeminiClient.GenerationConfig;
 import com.rayyan.tesseract.api.GeminiClient.ImagePart;
+import com.rayyan.tesseract.api.TaskKind;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -39,10 +39,14 @@ public final class MassExtractionAgent {
 
     private static final Logger LOGGER = LoggerFactory.getLogger("tesseract.mass_extraction");
 
-    private static final String EXTRACTOR_MODEL = "gemini-2.5-pro";
-    private static final int    VOXEL_RESOLUTION = VoxelMass.DEFAULT_RESOLUTION;
-    private static final int    MAX_PARSE_RETRIES = 1;
-    private static final GenerationConfig EXTRACT_CFG = GenerationConfig.of(0.2, 16_384);
+    private static final int VOXEL_RESOLUTION   = VoxelMass.DEFAULT_RESOLUTION;
+    private static final int MAX_PARSE_RETRIES  = 1;
+
+    /** Stricter reminder appended on escalation per §3.2.3. */
+    private static final String STRICT_REMINDER =
+        "Return ONLY a JSON array of integer [x,y,z] triples. "
+      + "No prose, no keys, no markdown fence. "
+      + "Example format: [[8,0,8],[8,1,8],[8,2,8]].";
 
     private MassExtractionAgent() {}
 
@@ -138,8 +142,14 @@ public final class MassExtractionAgent {
 
         List<ImagePart> images = List.of(new ImagePart(concept.bytes(), concept.mimeType()));
 
-        return gemini.completeWithModel(EXTRACTOR_MODEL, EXTRACTION_SYSTEM_PROMPT,
-                                        userPrompt, images, EXTRACT_CFG)
+        // §3.1 routing: model + generation config come from ModelRegistry.
+        // §3.2.3: validator rejects non-parseable / density-invalid responses so
+        // the call chain escalates (Pro is already top-tier — escalation is a
+        // no-op here but we keep the validator so future chain growth Just Works).
+        return gemini.call(TaskKind.MASS_EXTRACTION,
+                           EXTRACTION_SYSTEM_PROMPT, userPrompt, images,
+                           MassExtractionAgent::isValidMassResponse,
+                           STRICT_REMINDER, state.costTracker)
             .thenCompose(raw -> {
                 VoxelMass mass = tryParse(raw);
                 if (mass != null && mass.isValidDensity()) {
@@ -158,6 +168,12 @@ public final class MassExtractionAgent {
             });
     }
 
+    /** Parse-level validator for the §3.2.3 escalation chain. */
+    private static boolean isValidMassResponse(String raw) {
+        VoxelMass parsed = tryParse(raw);
+        return parsed != null && parsed.isValidDensity();
+    }
+
     // -------------------------------------------------------------------------
     // Optional single refinement pass (§2.1.3)
     // -------------------------------------------------------------------------
@@ -169,8 +185,9 @@ public final class MassExtractionAgent {
         String userPrompt = buildRefinementPrompt(initial);
         List<ImagePart> images = List.of(new ImagePart(concept.bytes(), concept.mimeType()));
 
-        return gemini.completeWithModel(EXTRACTOR_MODEL, REFINEMENT_SYSTEM_PROMPT,
-                                        userPrompt, images, EXTRACT_CFG)
+        return gemini.call(TaskKind.MASS_EXTRACTION,
+                           REFINEMENT_SYSTEM_PROMPT, userPrompt, images,
+                           state.costTracker)
             .thenApply(raw -> applyRefinement(initial, raw));
     }
 

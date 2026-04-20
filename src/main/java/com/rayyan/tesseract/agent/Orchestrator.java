@@ -354,6 +354,11 @@ public final class Orchestrator {
 
                 emit(state, "Build", "Complete — " + state.completedOps.size() + " blocks, "
                         + state.iterationCount + " critic pass(es).");
+                // §3.1.3 — surface cost summary to chat and full breakdown to logs.
+                if (state.costTracker.totalCalls() > 0) {
+                    emit(state, "Cost", state.costTracker.summaryLine());
+                    LOGGER.info("Cost breakdown:\n{}", state.costTracker.fullBreakdown());
+                }
                 LOGGER.info("Timeline: {}", buildTimeline(state));
 
                 AgentProgressManager.flashComplete(state.playerId);

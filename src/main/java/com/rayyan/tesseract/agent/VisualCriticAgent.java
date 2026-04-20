@@ -3,6 +3,7 @@ package com.rayyan.tesseract.agent;
 import com.google.gson.*;
 import com.rayyan.tesseract.api.GeminiClient;
 import com.rayyan.tesseract.api.GeminiClient.ImagePart;
+import com.rayyan.tesseract.api.TaskKind;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -113,10 +114,14 @@ public final class VisualCriticAgent {
             images.add(new ImagePart(primary.bytes(), primary.mimeType()));
         }
 
-        gemini.complete(SYSTEM_PROMPT, userPrompt, images)
+        // §3.1.2 routing + §3.3.1 optional critic semantics: routed via
+        // TaskKind.CRITIC_INNER (ModelSpec.isOptional=true). Cost attributed to
+        // the per-build tracker for the §3.1.3 summary.
+        gemini.call(TaskKind.CRITIC_INNER, SYSTEM_PROMPT, userPrompt, images, state.costTracker)
               .whenComplete((raw, ex) -> {
                   if (ex != null) {
-                      LOGGER.warn("VisualCriticAgent: Gemini call failed: {}", ex.getMessage());
+                      // §3.3.1 — critic failure is not fatal; orchestrator logs CRITIC_SKIPPED.
+                      LOGGER.warn("VisualCriticAgent: CRITIC_SKIPPED — Gemini call failed: {}", ex.getMessage());
                       onError.accept("VisualCriticAgent: Gemini call failed: " + ex.getMessage());
                       return;
                   }

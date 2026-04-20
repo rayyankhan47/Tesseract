@@ -231,6 +231,288 @@ public final class GeminiClient {
         }
     }
 
+    /**
+     * Accepts a raw response string; returns {@code true} if the response is
+     * valid/usable, {@code false} if the call should escalate.
+     * Used by {@link #call(TaskKind, String, String, List, Validator, String, CostTracker)}
+     * to drive the §3.2.3 parse-failure / refusal / empty escalation chain.
+     */
+    @FunctionalInterface
+    public interface Validator { boolean isValid(String raw); }
+
+    // =========================================================================
+    // Unified TaskKind-routed call (§3.1 / §3.2)
+    // =========================================================================
+
+    /**
+     * The v3 canonical entry point: resolves the model via {@link ModelRegistry},
+     * runs the failure-class retry chains (transient, rate-limit, parse-refusal)
+     * per REFACTOR_3 §3.2, and — when a {@link CostTracker} is supplied — records
+     * per-call token usage attributed to whichever model actually served the
+     * request.
+     */
+    public CompletableFuture<String> call(TaskKind kind,
+                                          String systemPrompt,
+                                          String userPrompt,
+                                          List<ImagePart> images) {
+        return call(kind, systemPrompt, userPrompt, images, null, null, null);
+    }
+
+    public CompletableFuture<String> call(TaskKind kind,
+                                          String systemPrompt,
+                                          String userPrompt,
+                                          List<ImagePart> images,
+                                          CostTracker cost) {
+        return call(kind, systemPrompt, userPrompt, images, null, null, cost);
+    }
+
+    /**
+     * @param validator         nullable — if present and returns false, the
+     *                          call escalates up the chain with a reminder.
+     * @param stricterReminder  text appended to {@code systemPrompt} on each
+     *                          escalation; ignored when {@code validator} is null.
+     */
+    public CompletableFuture<String> call(TaskKind kind,
+                                          String systemPrompt,
+                                          String userPrompt,
+                                          List<ImagePart> images,
+                                          Validator validator,
+                                          String stricterReminder,
+                                          CostTracker cost) {
+        ModelSpec spec = ModelRegistry.get(kind);
+        return runEscalation(kind, spec, systemPrompt, userPrompt, images,
+                             validator, stricterReminder, cost, 0);
+    }
+
+    private CompletableFuture<String> runEscalation(TaskKind kind,
+                                                    ModelSpec spec,
+                                                    String systemPrompt,
+                                                    String userPrompt,
+                                                    List<ImagePart> images,
+                                                    Validator validator,
+                                                    String stricterReminder,
+                                                    CostTracker cost,
+                                                    int escalationIdx) {
+        List<String> chain = spec.escalationChain();
+        int clampedIdx = Math.min(escalationIdx, chain.size() - 1);
+        String modelId = chain.get(clampedIdx);
+
+        // Append stricter reminder on escalation, never on first attempt.
+        String sys = systemPrompt;
+        if (escalationIdx > 0 && stricterReminder != null && !stricterReminder.isBlank()) {
+            sys = (systemPrompt == null ? "" : systemPrompt + "\n\n") + stricterReminder;
+        }
+
+        JsonObject body = buildMultiImageBody(sys, userPrompt, images);
+        GenerationConfig genCfg = spec.toGenerationConfig();
+        if (genCfg != null) body.add("generationConfig", genCfg.toJson());
+
+        return sendOnceWithRetries(modelId, spec.timeoutMs(), body, 0)
+            // 429 / quota — one-shot downshift (§3.2.2).
+            .thenCompose(result -> {
+                if (result.isRateLimited() && spec.downshiftTarget() != null
+                        && !spec.downshiftTarget().equals(modelId)) {
+                    LOGGER.warn("Gemini {} rate-limited — one-shot downshift to {}",
+                            modelId, spec.downshiftTarget());
+                    return sendOnceWithRetries(spec.downshiftTarget(), spec.timeoutMs(), body, 0);
+                }
+                if (result.error != null) {
+                    CompletableFuture<CallResult> failed = new CompletableFuture<>();
+                    failed.completeExceptionally(result.error);
+                    return failed;
+                }
+                return CompletableFuture.completedFuture(result);
+            })
+            // Validator — if rejected, escalate up the chain (§3.2.3, max 2 escalations).
+            .thenCompose(result -> {
+                String text = result.text;
+                boolean accepted = validator == null || validator.isValid(text);
+                if (!accepted) {
+                    int nextIdx = escalationIdx + 1;
+                    int maxEscalations = Math.min(2, chain.size() - 1);
+                    if (escalationIdx < maxEscalations) {
+                        LOGGER.warn("Gemini {} ({}) rejected by validator — escalating to {}",
+                                modelId, kind,
+                                chain.get(Math.min(nextIdx, chain.size() - 1)));
+                        return runEscalation(kind, spec, systemPrompt, userPrompt, images,
+                                             validator, stricterReminder, cost, nextIdx);
+                    }
+                    LOGGER.warn("Gemini {} ({}) still rejected after {} escalation(s) — returning last response",
+                            modelId, kind, maxEscalations);
+                }
+
+                if (cost != null) {
+                    cost.record(kind, result.modelId,
+                            result.inputTokens, result.outputTokens,
+                            spec.inputPricePerMTok(), spec.outputPricePerMTok());
+                }
+                return CompletableFuture.completedFuture(text);
+            });
+    }
+
+    // -------------------------------------------------------------------------
+    // Internal: one HTTP call with transient-failure retries (§3.2.1)
+    // -------------------------------------------------------------------------
+
+    private static final long[] TRANSIENT_BACKOFF_MS = { 500L, 2_000L, 8_000L };
+
+    /**
+     * Performs a single logical Gemini call: one HTTP request retried up to 3
+     * times on 5xx / timeout with exponential backoff (0.5s → 2s → 8s).
+     *
+     * <p>Return value semantics:
+     * <ul>
+     *   <li>2xx → {@link CallResult} with text + token counts.</li>
+     *   <li>429 → {@link CallResult#isRateLimited()} is true; no error field
+     *       so {@link #call} can decide whether to downshift.</li>
+     *   <li>Other non-2xx or I/O failure after retries → {@code CallResult.error}
+     *       set; {@link #call} will propagate.</li>
+     * </ul>
+     */
+    private CompletableFuture<CallResult> sendOnceWithRetries(String modelId,
+                                                              long timeoutMs,
+                                                              JsonObject body,
+                                                              int attempt) {
+        String url = String.format(BASE_URL, modelId) + "?key=" + apiKey;
+        HttpRequest request = HttpRequest.newBuilder()
+            .uri(URI.create(url))
+            .timeout(Duration.ofMillis(timeoutMs))
+            .header("Content-Type", "application/json")
+            .POST(HttpRequest.BodyPublishers.ofString(GSON.toJson(body)))
+            .build();
+
+        return HTTP.sendAsync(request, HttpResponse.BodyHandlers.ofString())
+            .handle((response, ex) -> {
+                // Transient I/O failures — treat like 5xx and retry.
+                if (ex != null) {
+                    if (attempt < TRANSIENT_BACKOFF_MS.length) {
+                        LOGGER.warn("Gemini '{}' I/O failure ({}); retry {}/{}",
+                                modelId, ex.getMessage(), attempt + 1,
+                                TRANSIENT_BACKOFF_MS.length);
+                        return null;  // signal retry
+                    }
+                    return CallResult.failure(modelId,
+                            new RuntimeException("Gemini I/O failure: " + ex.getMessage(), ex));
+                }
+
+                int status = response.statusCode();
+                if (status >= 500 || status == 408 || status == 503) {
+                    if (attempt < TRANSIENT_BACKOFF_MS.length) {
+                        LOGGER.warn("Gemini '{}' transient {}: {}; retry {}/{}",
+                                modelId, status, preview(response.body()),
+                                attempt + 1, TRANSIENT_BACKOFF_MS.length);
+                        return null;  // signal retry
+                    }
+                    return CallResult.failure(modelId, new RuntimeException(
+                            "Gemini transient " + status + " on " + modelId + " after "
+                            + TRANSIENT_BACKOFF_MS.length + " retries: "
+                            + preview(response.body())));
+                }
+
+                if (status == 429) {
+                    return CallResult.rateLimited(modelId, preview(response.body()));
+                }
+
+                if (status < 200 || status >= 300) {
+                    return CallResult.failure(modelId, new RuntimeException(
+                            "Gemini " + status + " (model=" + modelId + "): "
+                            + preview(response.body())));
+                }
+
+                return parseCallResult(modelId, response.body());
+            })
+            .thenCompose(result -> {
+                if (result != null) return CompletableFuture.completedFuture(result);
+                // null → retry
+                long delay = TRANSIENT_BACKOFF_MS[attempt]
+                        + (long) (RANDOM.nextDouble() * JITTER_MS);
+                return CompletableFuture
+                        .runAsync(() -> {},
+                                CompletableFuture.delayedExecutor(delay, TimeUnit.MILLISECONDS))
+                        .thenCompose(v -> sendOnceWithRetries(modelId, timeoutMs, body, attempt + 1));
+            });
+    }
+
+    private static CallResult parseCallResult(String modelId, String body) {
+        try {
+            JsonObject root = JsonParser.parseString(body).getAsJsonObject();
+            JsonArray candidates = root.getAsJsonArray("candidates");
+            if (candidates == null || candidates.size() == 0) {
+                // Refusal / safety filter — no candidates returned. Give caller
+                // an empty response so the validator chain can decide what next.
+                return CallResult.success(modelId, "", extractTokens(root, "promptTokenCount"),
+                        extractTokens(root, "candidatesTokenCount"));
+            }
+            JsonObject candidate = candidates.get(0).getAsJsonObject();
+            JsonObject content = candidate.getAsJsonObject("content");
+            if (content == null) {
+                return CallResult.success(modelId, "",
+                        extractTokens(root, "promptTokenCount"),
+                        extractTokens(root, "candidatesTokenCount"));
+            }
+            JsonArray parts = content.getAsJsonArray("parts");
+            String text = "";
+            if (parts != null && parts.size() > 0) {
+                JsonElement first = parts.get(0).getAsJsonObject().get("text");
+                if (first != null && !first.isJsonNull()) text = first.getAsString();
+            }
+            long inTok  = extractTokens(root, "promptTokenCount");
+            long outTok = extractTokens(root, "candidatesTokenCount");
+            return CallResult.success(modelId, text, inTok, outTok);
+        } catch (JsonSyntaxException e) {
+            return CallResult.failure(modelId,
+                    new RuntimeException("Failed to parse Gemini response: " + preview(body), e));
+        } catch (Exception e) {
+            return CallResult.failure(modelId,
+                    new RuntimeException("Unexpected error parsing Gemini response: " + e.getMessage(), e));
+        }
+    }
+
+    private static long extractTokens(JsonObject root, String field) {
+        try {
+            JsonObject usage = root.getAsJsonObject("usageMetadata");
+            if (usage == null) return 0L;
+            JsonElement el = usage.get(field);
+            return el == null || el.isJsonNull() ? 0L : el.getAsLong();
+        } catch (Exception e) {
+            return 0L;
+        }
+    }
+
+    /** Internal carrier for one HTTP-level Gemini call result. */
+    private static final class CallResult {
+        final String modelId;
+        final String text;
+        final long inputTokens;
+        final long outputTokens;
+        final boolean rateLimited;
+        final Throwable error;
+
+        private CallResult(String modelId, String text, long inTok, long outTok,
+                           boolean rateLimited, Throwable error) {
+            this.modelId = modelId;
+            this.text = text;
+            this.inputTokens = inTok;
+            this.outputTokens = outTok;
+            this.rateLimited = rateLimited;
+            this.error = error;
+        }
+
+        static CallResult success(String modelId, String text, long inTok, long outTok) {
+            return new CallResult(modelId, text, inTok, outTok, false, null);
+        }
+
+        static CallResult failure(String modelId, Throwable err) {
+            return new CallResult(modelId, null, 0L, 0L, false, err);
+        }
+
+        static CallResult rateLimited(String modelId, String bodyPreview) {
+            return new CallResult(modelId, bodyPreview, 0L, 0L, true, null);
+        }
+
+        boolean isRateLimited() { return rateLimited; }
+    }
+
     // -------------------------------------------------------------------------
     // Internal helpers
     // -------------------------------------------------------------------------

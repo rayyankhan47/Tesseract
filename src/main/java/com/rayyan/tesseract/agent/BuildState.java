@@ -49,6 +49,18 @@ public final class BuildState {
     /** Most recent silhouette drift measurement (§2.3.2); NaN until first compile pass. */
     double lastSilhouetteDrift = Double.NaN;
 
+    // ---- Refactor 3, Phase 2 — cost accounting (§3.1.3) ----
+    /** Per-build cost ledger, populated by every {@link com.rayyan.tesseract.api.GeminiClient#call} invocation. */
+    final com.rayyan.tesseract.api.CostTracker costTracker = new com.rayyan.tesseract.api.CostTracker();
+
+    // ---- Refactor 3, §3.3.3 — text-only safety fallback ----
+    /**
+     * When a visual phase (Imagen concept, mass extraction) catastrophically
+     * fails, the orchestrator flips this and the pipeline reverts to v2-style
+     * text-only blueprinting. Read by future Step 10 wiring.
+     */
+    boolean textOnlyFallback;
+
     // ---- Blueprint DSL pipeline (Refactor 2) ----
     /** Current best Blueprint (updated on each critic patch). Set by BlueprintPlanningAgent. */
     Blueprint blueprint;
