@@ -308,12 +308,12 @@ public final class GeminiClient {
         if (genCfg != null) body.add("generationConfig", genCfg.toJson());
 
         return sendOnceWithRetries(modelId, spec.timeoutMs(), body, 0)
-            // 429 / quota — one-shot downshift (§3.2.2).
+            // §3.2.2 — one-shot downshift on rate-limit / quota exhaustion.
             .thenCompose(result -> {
                 if (result.isRateLimited() && spec.downshiftTarget() != null
                         && !spec.downshiftTarget().equals(modelId)) {
-                    LOGGER.warn("Gemini {} rate-limited — one-shot downshift to {}",
-                            modelId, spec.downshiftTarget());
+                    LOGGER.warn("QUOTA_DOWNSHIFT kind={} from={} to={}",
+                            kind, modelId, spec.downshiftTarget());
                     return sendOnceWithRetries(spec.downshiftTarget(), spec.timeoutMs(), body, 0);
                 }
                 if (result.error != null) {
@@ -323,22 +323,23 @@ public final class GeminiClient {
                 }
                 return CompletableFuture.completedFuture(result);
             })
-            // Validator — if rejected, escalate up the chain (§3.2.3, max 2 escalations).
+            // §3.2.3 — parse/refusal/empty escalation (validator-gated).
             .thenCompose(result -> {
                 String text = result.text;
                 boolean accepted = validator == null || validator.isValid(text);
                 if (!accepted) {
+                    int maxEscalations = Math.min(RetryPolicy.MAX_ESCALATIONS, chain.size() - 1);
                     int nextIdx = escalationIdx + 1;
-                    int maxEscalations = Math.min(2, chain.size() - 1);
                     if (escalationIdx < maxEscalations) {
-                        LOGGER.warn("Gemini {} ({}) rejected by validator — escalating to {}",
-                                modelId, kind,
-                                chain.get(Math.min(nextIdx, chain.size() - 1)));
+                        LOGGER.warn("PARSE_ESCALATION kind={} from={} to={} reminder={}",
+                                kind, modelId,
+                                chain.get(Math.min(nextIdx, chain.size() - 1)),
+                                stricterReminder != null);
                         return runEscalation(kind, spec, systemPrompt, userPrompt, images,
                                              validator, stricterReminder, cost, nextIdx);
                     }
-                    LOGGER.warn("Gemini {} ({}) still rejected after {} escalation(s) — returning last response",
-                            modelId, kind, maxEscalations);
+                    LOGGER.warn("PARSE_GIVEUP kind={} model={} after={} escalations",
+                            kind, modelId, maxEscalations);
                 }
 
                 if (cost != null) {
@@ -351,22 +352,22 @@ public final class GeminiClient {
     }
 
     // -------------------------------------------------------------------------
-    // Internal: one HTTP call with transient-failure retries (§3.2.1)
+    // Internal: one HTTP call with failure-class routing (§3.2)
     // -------------------------------------------------------------------------
 
-    private static final long[] TRANSIENT_BACKOFF_MS = { 500L, 2_000L, 8_000L };
-
     /**
-     * Performs a single logical Gemini call: one HTTP request retried up to 3
-     * times on 5xx / timeout with exponential backoff (0.5s → 2s → 8s).
+     * Performs a single logical Gemini call: one HTTP request retried up to
+     * {@link RetryPolicy#TRANSIENT_BACKOFF_MS}{@code .length} times on any
+     * {@link RetryPolicy.FailureClass#TRANSIENT} response (5xx / 408 / 503 / I/O)
+     * with exponential backoff (0.5s → 2s → 8s).
      *
      * <p>Return value semantics:
      * <ul>
-     *   <li>2xx → {@link CallResult} with text + token counts.</li>
-     *   <li>429 → {@link CallResult#isRateLimited()} is true; no error field
-     *       so {@link #call} can decide whether to downshift.</li>
-     *   <li>Other non-2xx or I/O failure after retries → {@code CallResult.error}
-     *       set; {@link #call} will propagate.</li>
+     *   <li>OK (2xx) → {@link CallResult} with text + token counts.</li>
+     *   <li>RATE_LIMIT (429 or 403+quota body) → {@link CallResult#isRateLimited()}
+     *       is true; {@link #call} decides whether to downshift.</li>
+     *   <li>FATAL or exhausted transient → {@code CallResult.error} set;
+     *       {@link #call} propagates.</li>
      * </ul>
      */
     private CompletableFuture<CallResult> sendOnceWithRetries(String modelId,
@@ -383,49 +384,56 @@ public final class GeminiClient {
 
         return HTTP.sendAsync(request, HttpResponse.BodyHandlers.ofString())
             .handle((response, ex) -> {
-                // Transient I/O failures — treat like 5xx and retry.
+                // Transient I/O failure — classified as TRANSIENT.
                 if (ex != null) {
-                    if (attempt < TRANSIENT_BACKOFF_MS.length) {
-                        LOGGER.warn("Gemini '{}' I/O failure ({}); retry {}/{}",
+                    if (attempt < RetryPolicy.TRANSIENT_BACKOFF_MS.length) {
+                        LOGGER.warn("TRANSIENT_RETRY model={} cause=io msg={} attempt={}/{}",
                                 modelId, ex.getMessage(), attempt + 1,
-                                TRANSIENT_BACKOFF_MS.length);
+                                RetryPolicy.TRANSIENT_BACKOFF_MS.length);
                         return null;  // signal retry
                     }
                     return CallResult.failure(modelId,
-                            new RuntimeException("Gemini I/O failure: " + ex.getMessage(), ex));
+                            new RuntimeException("Gemini I/O failure after "
+                                    + RetryPolicy.TRANSIENT_BACKOFF_MS.length
+                                    + " retries: " + ex.getMessage(), ex));
                 }
 
                 int status = response.statusCode();
-                if (status >= 500 || status == 408 || status == 503) {
-                    if (attempt < TRANSIENT_BACKOFF_MS.length) {
-                        LOGGER.warn("Gemini '{}' transient {}: {}; retry {}/{}",
-                                modelId, status, preview(response.body()),
-                                attempt + 1, TRANSIENT_BACKOFF_MS.length);
-                        return null;  // signal retry
-                    }
-                    return CallResult.failure(modelId, new RuntimeException(
-                            "Gemini transient " + status + " on " + modelId + " after "
-                            + TRANSIENT_BACKOFF_MS.length + " retries: "
-                            + preview(response.body())));
-                }
+                String bodyPreview = preview(response.body());
+                RetryPolicy.FailureClass cls = RetryPolicy.classify(status, response.body());
 
-                if (status == 429) {
-                    return CallResult.rateLimited(modelId, preview(response.body()));
-                }
+                switch (cls) {
+                    case OK:
+                        return parseCallResult(modelId, response.body());
 
-                if (status < 200 || status >= 300) {
-                    return CallResult.failure(modelId, new RuntimeException(
-                            "Gemini " + status + " (model=" + modelId + "): "
-                            + preview(response.body())));
-                }
+                    case TRANSIENT:
+                        if (attempt < RetryPolicy.TRANSIENT_BACKOFF_MS.length) {
+                            LOGGER.warn("TRANSIENT_RETRY model={} status={} body={} attempt={}/{}",
+                                    modelId, status, bodyPreview,
+                                    attempt + 1, RetryPolicy.TRANSIENT_BACKOFF_MS.length);
+                            return null;
+                        }
+                        return CallResult.failure(modelId, new RuntimeException(
+                                "Gemini transient " + status + " on " + modelId + " after "
+                                + RetryPolicy.TRANSIENT_BACKOFF_MS.length + " retries: "
+                                + bodyPreview));
 
-                return parseCallResult(modelId, response.body());
+                    case RATE_LIMIT:
+                        LOGGER.warn("RATE_LIMIT model={} status={} body={}",
+                                modelId, status, bodyPreview);
+                        return CallResult.rateLimited(modelId, bodyPreview);
+
+                    case FATAL:
+                    default:
+                        return CallResult.failure(modelId, new RuntimeException(
+                                "Gemini " + status + " (model=" + modelId + "): "
+                                + bodyPreview));
+                }
             })
             .thenCompose(result -> {
                 if (result != null) return CompletableFuture.completedFuture(result);
-                // null → retry
-                long delay = TRANSIENT_BACKOFF_MS[attempt]
-                        + (long) (RANDOM.nextDouble() * JITTER_MS);
+                long delay = RetryPolicy.TRANSIENT_BACKOFF_MS[attempt]
+                        + (long) (RANDOM.nextDouble() * RetryPolicy.JITTER_MS);
                 return CompletableFuture
                         .runAsync(() -> {},
                                 CompletableFuture.delayedExecutor(delay, TimeUnit.MILLISECONDS))

@@ -328,7 +328,7 @@ Legend: [x] complete · [~] in progress · [ ] pending
   - [x] 2.3 Silhouette critic bootstrap
 - [~] Step 3 — Model Tiering & Fallback Redesign
   - [x] 3.1 Model registry + TaskKind + CostTracker
-  - [ ] 3.2 Failure-class retry chains
+  - [x] 3.2 Failure-class retry chains
   - [ ] 3.3 Graceful degradation
 - [ ] Step 3 — Model Tiering & Fallback Redesign
 - [ ] Step 4 — RAG Architectural Knowledge Base
