@@ -342,7 +342,10 @@ Legend: [x] complete · [~] in progress · [ ] pending
   - [x] 6.1 Core toolbox
   - [x] 6.2 Restricted Python sandbox
   - [x] 6.3 Self-extending toolbox
-- [ ] Step 7 — L4 REPL Agent
+- [x] Step 7 — L4 REPL Agent
+  - [x] 7.1 REPL loop
+  - [x] 7.2 Element scheduling
+  - [x] 7.3 Cumulative compilation
 - [ ] Step 8 — Parallel Critic Swarm
 - [ ] Step 9 — Fractal Texture Pass
 - [ ] Step 10 — State Machine & Orchestrator

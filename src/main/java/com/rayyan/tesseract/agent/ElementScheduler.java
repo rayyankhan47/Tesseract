@@ -44,6 +44,9 @@ public final class ElementScheduler {
 
     private static final Logger LOGGER = LoggerFactory.getLogger("tesseract.l4_sched");
 
+    /** Pixel-per-block scale for debug frame dumps (§7.3.2). */
+    private static final int DEBUG_PPB = 12;
+
     private ElementScheduler() {}
 
     /**
@@ -89,6 +92,12 @@ public final class ElementScheduler {
             if (locked.lastScript() != null && !locked.lastScript().isBlank()) {
                 state.buildScripts.add(locked.lastScript());
             }
+
+            // §7.3.1 — refresh the incremental CompiledBlueprint so the
+            // state machine and any late-stage consumers see progress.
+            state.compiledBlueprint = cumulative.toCompiledBlueprint();
+            // §7.3.2 — debug-only per-lock frame dump.
+            cumulative.maybeDumpDebugFrame(spec.id(), DEBUG_PPB);
 
             long elapsed = System.currentTimeMillis() - startMs;
             LOGGER.info("L4_ELEMENT_LOCK id={} turns={} score={} proposed={} committed={} "

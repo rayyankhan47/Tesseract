@@ -1,10 +1,15 @@
 package com.rayyan.tesseract.agent;
 
 import com.rayyan.tesseract.blueprint.Blueprint;
+import com.rayyan.tesseract.blueprint.CompiledBlueprint;
+import com.rayyan.tesseract.blueprint.PrimitiveBounds;
 import com.rayyan.tesseract.render.IsoRenderer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -40,6 +45,7 @@ public final class CumulativeBuild {
     private final int resolution;
     private final Map<Long, Ownership> owned = new LinkedHashMap<>();
     private final List<ElementLock> locks = new ArrayList<>();
+    private final Map<String, int[]> elementBounds = new LinkedHashMap<>();
 
     private record Ownership(String elementId, String material) {}
 
@@ -64,7 +70,10 @@ public final class CumulativeBuild {
      */
     public Set<BlockOp> commit(ElementLock candidate) {
         int overlaps = 0;
+        String elementId = candidate.spec().id();
         java.util.LinkedHashSet<BlockOp> committed = new java.util.LinkedHashSet<>();
+        int minX = Integer.MAX_VALUE, minY = Integer.MAX_VALUE, minZ = Integer.MAX_VALUE;
+        int maxX = Integer.MIN_VALUE, maxY = Integer.MIN_VALUE, maxZ = Integer.MIN_VALUE;
         for (BlockOp op : candidate.proposedOps()) {
             if (op == null || op.block == null) continue;
             long key = pack(op.x, op.y, op.z);
@@ -72,12 +81,18 @@ public final class CumulativeBuild {
                 overlaps++;
                 continue;
             }
-            owned.put(key, new Ownership(candidate.spec().id(), op.block));
+            owned.put(key, new Ownership(elementId, op.block));
             committed.add(op);
+            if (op.x < minX) minX = op.x; if (op.x > maxX) maxX = op.x;
+            if (op.y < minY) minY = op.y; if (op.y > maxY) maxY = op.y;
+            if (op.z < minZ) minZ = op.z; if (op.z > maxZ) maxZ = op.z;
         }
         if (overlaps > 0) {
             LOGGER.info("OVERLAP element={} skipped={} owned_by_earlier=true",
-                    candidate.spec().id(), overlaps);
+                    elementId, overlaps);
+        }
+        if (!committed.isEmpty()) {
+            elementBounds.put(elementId, new int[]{minX, minY, minZ, maxX, maxY, maxZ});
         }
         locks.add(candidate);
         return committed;
@@ -86,7 +101,14 @@ public final class CumulativeBuild {
     /** Read-only view of all committed block ops across every lock. */
     public List<BlockOp> allOps() {
         List<BlockOp> out = new ArrayList<>(owned.size());
-        for (ElementLock lock : locks) out.addAll(lock.committedOps());
+        for (Map.Entry<Long, Ownership> e : owned.entrySet()) {
+            long packed = e.getKey();
+            int[] xyz = unpack(packed);
+            BlockOp op = new BlockOp();
+            op.x = xyz[0]; op.y = xyz[1]; op.z = xyz[2];
+            op.block = e.getValue().material();
+            out.add(op);
+        }
         return out;
     }
 
@@ -101,14 +123,64 @@ public final class CumulativeBuild {
         return IsoRenderer.renderPng(ops, bounds, ppb);
     }
 
+    /**
+     * §7.3.1 — incremental {@link CompiledBlueprint} snapshot from the
+     * currently committed ops. Every new {@link #commit} call refines
+     * this output so downstream stages can replace their one-shot
+     * compile step with progressive reads.
+     */
+    public CompiledBlueprint toCompiledBlueprint() {
+        List<BlockOp> ops = allOps();
+        Map<String, PrimitiveBounds> bounds = new LinkedHashMap<>(elementBounds.size());
+        for (Map.Entry<String, int[]> e : elementBounds.entrySet()) {
+            int[] box = e.getValue();
+            bounds.put(e.getKey(), new PrimitiveBounds(
+                    box[0], box[1], box[2],
+                    box[3] - box[0] + 1,
+                    box[4] - box[1] + 1,
+                    box[5] - box[2] + 1));
+        }
+        return new CompiledBlueprint(ops, bounds);
+    }
+
+    /**
+     * §7.3.2 — if {@code tesseract.debug.renders} is set, dump the
+     * current cumulative render to {@code run/tesseract_debug/l4/}.
+     * No-op when the debug flag isn't set. Failure-safe (logs and
+     * swallows) — debug artefacts can't fail a build.
+     */
+    public void maybeDumpDebugFrame(String elementId, int ppb) {
+        if (!IsoRenderer.isDebugEnabled()) return;
+        try {
+            byte[] png = render(ppb);
+            Path dir = IsoRenderer.debugDir().resolve("l4");
+            Files.createDirectories(dir);
+            String safe = elementId == null ? "unknown" : elementId.replaceAll("[^A-Za-z0-9_.-]", "_");
+            String name = String.format("cumulative_%03d_%s.png", locks.size(), safe);
+            Files.write(dir.resolve(name), png);
+        } catch (IOException | RuntimeException e) {
+            LOGGER.debug("L4_DEBUG_DUMP skipped element={} reason={}", elementId, e.getMessage());
+        }
+    }
+
     // -------------------------------------------------------------------------
     // Helpers
     // -------------------------------------------------------------------------
 
+    private static final long MASK_21 = (1L << 21) - 1L;
+    private static final int COORD_BIAS = 1 << 20;
+
     private static long pack(int x, int y, int z) {
-        long ux = ((long) x + (1 << 20)) & ((1L << 21) - 1L);
-        long uy = ((long) y + (1 << 20)) & ((1L << 21) - 1L);
-        long uz = ((long) z + (1 << 20)) & ((1L << 21) - 1L);
+        long ux = ((long) x + COORD_BIAS) & MASK_21;
+        long uy = ((long) y + COORD_BIAS) & MASK_21;
+        long uz = ((long) z + COORD_BIAS) & MASK_21;
         return (ux << 42) | (uy << 21) | uz;
+    }
+
+    private static int[] unpack(long packed) {
+        int x = (int) ((packed >> 42) & MASK_21) - COORD_BIAS;
+        int y = (int) ((packed >> 21) & MASK_21) - COORD_BIAS;
+        int z = (int) (packed & MASK_21) - COORD_BIAS;
+        return new int[]{x, y, z};
     }
 }
