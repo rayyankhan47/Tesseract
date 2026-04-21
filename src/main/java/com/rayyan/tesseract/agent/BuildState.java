@@ -119,8 +119,6 @@ public final class BuildState {
     Blueprint blueprint;
     /** Output of the most recent BlueprintCompiler.compile() call. */
     CompiledBlueprint compiledBlueprint;
-    /** Wall-clock ms when the iteration loop started; used for budget enforcement. */
-    long iterationStartMs;
 
     // ---- Placement accumulator ----
     List<BlockOp> completedOps;
