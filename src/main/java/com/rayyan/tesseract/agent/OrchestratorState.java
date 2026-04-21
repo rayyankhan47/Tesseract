@@ -1,40 +1,40 @@
 package com.rayyan.tesseract.agent;
 
 /**
- * States of the Orchestrator's build pipeline state machine.
+ * States of the Orchestrator's Refactor 3 build pipeline (Step 10).
  *
  * <h3>Legal transition set</h3>
  * <pre>
- * IDLE              → INTERPRETING
- * INTERPRETING      → BLUEPRINTING
- * BLUEPRINTING      → COMPILING
- * COMPILING         → RENDERING
- * COMPILING         → FAILED          (compile error)
- * RENDERING         → CRITIQUING_VISUAL
- * RENDERING         → DETAILING       (single-iteration fast path / iterate=false)
- * CRITIQUING_VISUAL → PATCHING        (not satisfied, iterations remaining)
- * CRITIQUING_VISUAL → DETAILING       (satisfied | max iterations | budget exceeded)
- * PATCHING          → COMPILING       (loop back)
- * DETAILING         → PLACING
- * PLACING           → COMPLETE
- * any               → FAILED
+ * IDLE                 → CONCEPT_SYNTHESIZING
+ * CONCEPT_SYNTHESIZING → MASS_EXTRACTING | RAG_QUERYING | COMPLETE | FAILED
+ * MASS_EXTRACTING      → RAG_QUERYING | COMPLETE | FAILED
+ * RAG_QUERYING         → L1_ARCHITECTING | COMPLETE | FAILED
+ * L1_ARCHITECTING      → L2_DECOMPOSING | COMPLETE | FAILED
+ * L2_DECOMPOSING       → L3_DESIGNING | COMPLETE | FAILED
+ * L3_DESIGNING         → L4_ITERATING | COMPLETE | FAILED
+ * L4_ITERATING         → TEXTURING | COMPLETE | FAILED
+ * TEXTURING            → PLACING | FAILED
+ * PLACING              → COMPLETE | FAILED
+ * any                  → FAILED
  * </pre>
+ *
+ * <p>{@code RAG_QUERYING} is reachable directly from {@code CONCEPT_SYNTHESIZING}
+ * when {@link BuildState#textOnlyFallback} skips visual mass extraction.
+ * {@code COMPLETE} mid-pipeline is used only when the global $2.00 USD budget
+ * is exceeded before further LLM work (ship whatever geometry exists).
  */
 public enum OrchestratorState {
     IDLE,
-    INTERPRETING,
-    /** Calls {@code BlueprintPlanningAgent}; renamed from {@code PLANNING} in Step 9. */
-    BLUEPRINTING,
-    /** Runs {@code BlueprintCompiler} deterministically on the server thread. */
-    COMPILING,
-    /** Runs {@code IsoRenderer} deterministically on the server thread. */
-    RENDERING,
-    /** Calls {@code VisualCriticAgent} (async Gemini Vision). */
-    CRITIQUING_VISUAL,
-    /** Applies {@code BlueprintPatcher} patches; immediately transitions back to {@code COMPILING}. */
-    PATCHING,
-    /** {@code DetailAgent} decoration pass. */
-    DETAILING,
+    CONCEPT_SYNTHESIZING,
+    MASS_EXTRACTING,
+    RAG_QUERYING,
+    L1_ARCHITECTING,
+    L2_DECOMPOSING,
+    L3_DESIGNING,
+    /** Runs {@link ElementScheduler#runAll} (per-element L4 REPL). */
+    L4_ITERATING,
+    /** {@link com.rayyan.tesseract.texture.FractalTexturePipeline#apply} (no LLM). */
+    TEXTURING,
     PLACING,
     COMPLETE,
     FAILED;
@@ -46,16 +46,17 @@ public enum OrchestratorState {
     public static void assertTransition(OrchestratorState from, OrchestratorState to) {
         if (to == FAILED) return;
         boolean allowed = switch (from) {
-            case IDLE              -> to == INTERPRETING;
-            case INTERPRETING      -> to == BLUEPRINTING;
-            case BLUEPRINTING      -> to == COMPILING;
-            case COMPILING         -> to == RENDERING;
-            case RENDERING         -> to == CRITIQUING_VISUAL || to == DETAILING;
-            case CRITIQUING_VISUAL -> to == PATCHING || to == DETAILING;
-            case PATCHING          -> to == COMPILING;
-            case DETAILING         -> to == PLACING;
-            case PLACING           -> to == COMPLETE;
-            case COMPLETE, FAILED  -> false;
+            case IDLE -> to == CONCEPT_SYNTHESIZING;
+            case CONCEPT_SYNTHESIZING -> to == MASS_EXTRACTING || to == RAG_QUERYING || to == COMPLETE;
+            case MASS_EXTRACTING -> to == RAG_QUERYING || to == COMPLETE;
+            case RAG_QUERYING -> to == L1_ARCHITECTING || to == COMPLETE;
+            case L1_ARCHITECTING -> to == L2_DECOMPOSING || to == COMPLETE;
+            case L2_DECOMPOSING -> to == L3_DESIGNING || to == COMPLETE;
+            case L3_DESIGNING -> to == L4_ITERATING || to == COMPLETE;
+            case L4_ITERATING -> to == TEXTURING || to == COMPLETE;
+            case TEXTURING -> to == PLACING;
+            case PLACING -> to == COMPLETE;
+            case COMPLETE, FAILED -> false;
         };
         if (!allowed) {
             throw new IllegalStateException(

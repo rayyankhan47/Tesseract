@@ -93,14 +93,8 @@ public final class DetailAgent {
                 state.blueprint != null ? state.blueprint.name : "?",
                 state.compiledBlueprint.ops().size());
 
-        // Use multimodal call when we have a render PNG; fall back to text-only
-        if (state.lastRenderPng != null && state.lastRenderPng.length > 0) {
-            gemini.complete(SYSTEM_PROMPT, userPrompt, state.lastRenderPng, "image/png")
-                  .whenComplete((raw, ex) -> handleResponse(raw, ex, state, onComplete));
-        } else {
-            gemini.complete(SYSTEM_PROMPT, userPrompt)
-                  .whenComplete((raw, ex) -> handleResponse(raw, ex, state, onComplete));
-        }
+        gemini.complete(SYSTEM_PROMPT, userPrompt)
+                .whenComplete((raw, ex) -> handleResponse(raw, ex, state, onComplete));
     }
 
     // -------------------------------------------------------------------------

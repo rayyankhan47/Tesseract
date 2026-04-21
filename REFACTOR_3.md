@@ -354,6 +354,6 @@ Legend: [x] complete · [~] in progress · [ ] pending
   - [x] 9.1 Perlin weathering
   - [x] 9.2 WFC patterned regions
   - [x] 9.3 L-system + decay + cracks
-- [ ] Step 10 — State Machine & Orchestrator
+- [x] Step 10 — State Machine & Orchestrator
 - [ ] Step 11 — Instant Placement
 - [ ] Step 12 — Testing, Prompt Tuning, Cost Audit

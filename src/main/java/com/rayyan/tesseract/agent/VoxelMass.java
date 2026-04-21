@@ -44,6 +44,43 @@ public final class VoxelMass {
         this.filled = new boolean[resolution][resolution][resolution];
     }
 
+    /**
+     * Text-only / Phase-fallback envelope: a centered box in {@link #DEFAULT_RESOLUTION}³
+     * sized from {@link BuildSpec} footprint so L1 has a valid silhouette when
+     * Imagen and mass extraction are skipped.
+     */
+    public static VoxelMass syntheticFootprintFromSpec(BuildSpec spec) {
+        int w = spec != null ? Math.max(4, spec.width) : 8;
+        int h = spec != null ? Math.max(4, spec.height) : 8;
+        int d = spec != null ? Math.max(4, spec.depth) : 8;
+        int res = DEFAULT_RESOLUTION;
+        int sx = Math.max(3, Math.min(res, Math.round(w * (res / 32f))));
+        int sy = Math.max(3, Math.min(res, Math.round(h * (res / 32f))));
+        int sz = Math.max(3, Math.min(res, Math.round(d * (res / 32f))));
+        VoxelMass m = new VoxelMass(res);
+        int ox = (res - sx) / 2;
+        int oy = 0;
+        int oz = (res - sz) / 2;
+        for (int x = ox; x < ox + sx && x < res; x++) {
+            for (int y = oy; y < oy + sy && y < res; y++) {
+                for (int z = oz; z < oz + sz && z < res; z++) {
+                    m.add(x, y, z);
+                }
+            }
+        }
+        if (!m.isValidDensity()) {
+            m = new VoxelMass(res);
+            for (int x = 4; x < 12; x++) {
+                for (int y = 0; y < 12; y++) {
+                    for (int z = 4; z < 12; z++) {
+                        m.add(x, y, z);
+                    }
+                }
+            }
+        }
+        return m;
+    }
+
     // -------------------------------------------------------------------------
     // Mutation
     // -------------------------------------------------------------------------

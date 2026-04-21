@@ -65,6 +65,9 @@ public final class ElementScheduler {
         List<ElementSpec> specs = new ArrayList<>(state.elementSpecs);
         if (specs.isEmpty()) {
             LOGGER.info("L4_SCHED_EMPTY — no elements from L3, skipping REPL");
+            CumulativeBuild empty = new CumulativeBuild();
+            state.cumulativeBuild = empty;
+            state.compiledBlueprint = empty.toCompiledBlueprint();
             return List.of();
         }
 

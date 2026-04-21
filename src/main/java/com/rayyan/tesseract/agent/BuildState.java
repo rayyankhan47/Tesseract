@@ -69,6 +69,12 @@ public final class BuildState {
     /** L3 Element Designer's per-zone elements, already dependency-sorted. Empty until §5.3 runs. */
     final List<com.rayyan.tesseract.plan.ElementSpec> elementSpecs = new CopyOnWriteArrayList<>();
 
+    /**
+     * Names or snippets of user-defined toolbox extensions promoted during this build (§6.3).
+     * Filled when ToolPromoter commits; empty in most builds.
+     */
+    final List<String> customToolbox = new CopyOnWriteArrayList<>();
+
     // ---- Refactor 3, §6.3 — self-extending toolbox ----
     /**
      * Every finalised L4 REPL script accumulated across this build's
@@ -113,10 +119,6 @@ public final class BuildState {
     Blueprint blueprint;
     /** Output of the most recent BlueprintCompiler.compile() call. */
     CompiledBlueprint compiledBlueprint;
-    /** Number of visual critic passes completed so far. */
-    int iterationCount;
-    /** Cached isometric render PNG (for critic calls and optional debug export). */
-    byte[] lastRenderPng;
     /** Wall-clock ms when the iteration loop started; used for budget enforcement. */
     long iterationStartMs;
 
@@ -167,7 +169,6 @@ public final class BuildState {
         this.stateEnteredAtMs = System.currentTimeMillis();
         this.completedOps = new ArrayList<>();
         this.eventLog = new CopyOnWriteArrayList<>();
-        this.iterationCount = 0;
     }
 
     // -------------------------------------------------------------------------
@@ -176,6 +177,11 @@ public final class BuildState {
 
     public com.rayyan.tesseract.api.CostTracker costTracker() {
         return costTracker;
+    }
+
+    /** §10.2 — alias for {@link com.rayyan.tesseract.api.CostTracker#totalUsd()}. */
+    public double costSoFar() {
+        return costTracker.totalUsd();
     }
 
     public VoxelMass massSketch() {

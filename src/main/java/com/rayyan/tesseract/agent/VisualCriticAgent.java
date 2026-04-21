@@ -83,16 +83,16 @@ public final class VisualCriticAgent {
     /**
      * Runs a visual critique pass asynchronously.
      *
-     * <p>Requires {@code state.lastRenderPng} to be set (call {@link
-     * com.rayyan.tesseract.render.IsoRenderer#renderPng} first) and
-     * {@code state.blueprint} to be the current blueprint.
+     * <p>Requires an isometric render PNG (e.g. from {@link
+     * com.rayyan.tesseract.render.IsoRenderer#renderPng}) and {@code state.blueprint}.
      */
     public static void run(BuildState state,
+                           byte[] renderPng,
                            GeminiClient gemini,
                            Consumer<Critique> onComplete,
                            Consumer<String> onError) {
-        if (state.lastRenderPng == null || state.lastRenderPng.length == 0) {
-            LOGGER.error("VisualCriticAgent: lastRenderPng is null — cannot critique without a render");
+        if (renderPng == null || renderPng.length == 0) {
+            LOGGER.error("VisualCriticAgent: render PNG is null — cannot critique without a render");
             onError.accept("VisualCriticAgent: no render PNG available");
             return;
         }
@@ -103,12 +103,12 @@ public final class VisualCriticAgent {
         }
 
         String userPrompt = buildUserPrompt(state);
-        LOGGER.info("VisualCriticAgent: critiquing '{}' (iter {})", state.blueprint.name, state.iterationCount);
+        LOGGER.info("VisualCriticAgent: critiquing '{}'", state.blueprint.name);
 
         // 1.3.2 — attach the primary concept reference image (if Phase 0 populated it)
         // alongside the current render so the critic compares against the visual north star.
         List<ImagePart> images = new ArrayList<>();
-        images.add(new ImagePart(state.lastRenderPng, "image/png"));
+        images.add(new ImagePart(renderPng, "image/png"));
         ReferenceImage primary = primaryReference(state);
         if (primary != null) {
             images.add(new ImagePart(primary.bytes(), primary.mimeType()));
