@@ -36,7 +36,7 @@ public final class ReferenceMatchCritic {
     public static CompletableFuture<CriticOpinion> evaluate(
             BuildState state, GeminiClient gemini, ElementSpec spec, byte[] cumulativeRender) {
 
-        ReferenceImage concept = primaryConcept(state);
+        ReferenceImage concept = state == null ? null : state.primaryReferenceImage();
         if (concept == null || cumulativeRender == null || cumulativeRender.length == 0) {
             return CompletableFuture.completedFuture(
                     CriticOpinion.skipped(CriticKind.REFERENCE_MATCH, "no concept or render"));
@@ -51,7 +51,7 @@ public final class ReferenceMatchCritic {
 
         return gemini.call(TaskKind.CRITIC_INNER, SYSTEM, user, images,
                         CriticJson::validOpinionJson, REMINDER,
-                        state == null ? null : state.costTracker)
+                        state == null ? null : state.costTracker())
                 .thenApply(raw -> CriticJson.parseOpinion(CriticKind.REFERENCE_MATCH, raw))
                 .exceptionally(err -> {
                     LOGGER.warn("CRITIC_SKIPPED kind=REFERENCE_MATCH element={} reason={}",
@@ -60,9 +60,4 @@ public final class ReferenceMatchCritic {
                 });
     }
 
-    private static ReferenceImage primaryConcept(BuildState state) {
-        if (state == null || state.referenceImages.isEmpty()) return null;
-        int idx = Math.max(0, Math.min(state.selectedConceptIndex, state.referenceImages.size() - 1));
-        return state.referenceImages.get(idx);
-    }
 }

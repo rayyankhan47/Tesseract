@@ -40,8 +40,8 @@ public final class StyleCritic {
                     CriticOpinion.skipped(CriticKind.STYLE, "no render"));
         }
 
-        String style = (state != null && state.massPlan != null)
-                ? state.massPlan.overallStyle() : "unspecified";
+        String style = (state != null && state.massPlan() != null)
+                ? state.massPlan().overallStyle() : "unspecified";
         String user = "Element: " + spec.id() + "\nDescription: " + spec.description()
                 + "\nTarget style: " + style + "\nDoes this element read as that style?";
 
@@ -50,7 +50,7 @@ public final class StyleCritic {
 
         return gemini.call(TaskKind.CRITIC_INNER, SYSTEM, user, images,
                         CriticJson::validOpinionJson, REMINDER,
-                        state == null ? null : state.costTracker)
+                        state == null ? null : state.costTracker())
                 .thenApply(raw -> CriticJson.parseOpinion(CriticKind.STYLE, raw))
                 .exceptionally(err -> {
                     LOGGER.warn("CRITIC_SKIPPED kind=STYLE element={} reason={}",

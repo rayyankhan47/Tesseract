@@ -31,12 +31,12 @@ public final class SilhouetteCritic {
      * @param candidateOps voxels for this element only (L4 sandbox output).
      */
     public static CriticOpinion evaluate(BuildState state, Set<BlockOp> candidateOps) {
-        if (state == null || state.massSketch == null || candidateOps == null || candidateOps.isEmpty()) {
+        if (state == null || state.massSketch() == null || candidateOps == null || candidateOps.isEmpty()) {
             return new CriticOpinion(CriticKind.SILHOUETTE, 1.0,
                     "no mass sketch or empty candidate — silhouette check waived",
                     List.of(), false, "", 0.0);
         }
-        VoxelMass mass = state.massSketch;
+        VoxelMass mass = state.massSketch();
         int res = mass.resolution();
         int outside = 0;
         int total = 0;

@@ -46,7 +46,7 @@ public final class DetailCritic {
 
         return gemini.call(TaskKind.CRITIC_INNER, SYSTEM, user, images,
                         CriticJson::validOpinionJson, REMINDER,
-                        state == null ? null : state.costTracker)
+                        state == null ? null : state.costTracker())
                 .thenApply(raw -> CriticJson.parseOpinion(CriticKind.DETAIL, raw))
                 .exceptionally(err -> {
                     LOGGER.warn("CRITIC_SKIPPED kind=DETAIL element={} reason={}",

@@ -346,7 +346,10 @@ Legend: [x] complete · [~] in progress · [ ] pending
   - [x] 7.1 REPL loop
   - [x] 7.2 Element scheduling
   - [x] 7.3 Cumulative compilation
-- [ ] Step 8 — Parallel Critic Swarm
+- [x] Step 8 — Parallel Critic Swarm
+  - [x] 8.1 Critic specialization (5 seats)
+  - [x] 8.2 Parallel dispatch
+  - [x] 8.3 ReconcilerAgent
 - [ ] Step 9 — Fractal Texture Pass
 - [ ] Step 10 — State Machine & Orchestrator
 - [ ] Step 11 — Instant Placement

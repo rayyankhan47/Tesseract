@@ -47,7 +47,7 @@ public final class ProportionCritic {
 
         return gemini.call(TaskKind.CRITIC_INNER, SYSTEM, user, images,
                         CriticJson::validOpinionJson, REMINDER,
-                        state == null ? null : state.costTracker)
+                        state == null ? null : state.costTracker())
                 .thenApply(raw -> CriticJson.parseOpinion(CriticKind.PROPORTION, raw))
                 .exceptionally(err -> {
                     LOGGER.warn("CRITIC_SKIPPED kind=PROPORTION element={} reason={}",

@@ -103,6 +103,6 @@ public final class CriticSwarm {
                 sb.append(String.format("%.2f", o.score()));
             }
         }
-        state.timeline.add(sb.toString());
+        state.appendTimeline(sb.toString());
     }
 }

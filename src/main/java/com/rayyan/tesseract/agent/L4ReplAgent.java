@@ -13,6 +13,8 @@ import com.rayyan.tesseract.plan.StructuralZone;
 import com.rayyan.tesseract.render.IsoRenderer;
 import com.rayyan.tesseract.sandbox.Sandbox;
 import com.rayyan.tesseract.sandbox.SandboxLimits;
+import com.rayyan.tesseract.agent.critic.CriticOpinion;
+import com.rayyan.tesseract.agent.critic.CriticSwarm;
 import com.rayyan.tesseract.toolbox.Toolbox;
 import com.rayyan.tesseract.toolbox.ToolboxExtensionStore;
 import org.slf4j.Logger;
@@ -30,7 +32,8 @@ import java.util.Set;
 /**
  * §7.1 — the L4 REPL. Runs one {@link ElementSpec} through the
  * write-script / run / render / critique loop until the element is
- * either approved by {@link L4Critic} or hits the §7.2 budget caps.
+ * either approved by the §8 critic swarm + {@link ReconcilerAgent} or
+ * hits the §7.2 budget caps.
  *
  * <p>Per turn the agent sees (1) the concept image(s), (2) the render
  * of the current cumulative build, (3) the previous turn's critic
@@ -47,8 +50,8 @@ import java.util.Set;
  *       {@code ELEMENT_BUDGET_EXCEEDED}.</li>
  *   <li>§7.2.3 — 3 consecutive sandbox errors → fall back to a plain
  *       {@link Toolbox#box} spanning the element's zone bounds.</li>
- *   <li>Persistent critic failures are auto-approved (see
- *       {@link L4Critic}) so a broken critic can't stall an element.</li>
+ *   <li>Critic timeouts become {@code CRITIC_SKIPPED}; reconciler
+ *       fail-soft still returns a merged brief (§8.2 / §8.3).</li>
  * </ul>
  *
  * <p>Finalised scripts are appended to {@link BuildState#buildScripts}
@@ -181,31 +184,45 @@ public final class L4ReplAgent {
             Set<BlockOp> candidateOps = sandboxResult.collectedOps();
             if (candidateOps == null) candidateOps = new LinkedHashSet<>();
 
-            byte[] elementRender = renderElementPreview(candidateOps, resolution(cumulative));
             byte[] cumulativePreview = renderWithPreview(cumulative, candidateOps);
 
-            L4Critic.Verdict verdict = L4Critic
-                    .evaluate(state, gemini, spec, elementRender, cumulativePreview)
-                    .join();
-            lastCriticNotes = verdict.notes();
-            lastIssues = verdict.issues();
-            lastSuggestions = verdict.suggestions();
-            lastScore = verdict.score();
+            List<CriticOpinion> opinions = CriticSwarm.runSync(
+                    state, gemini, spec, candidateOps, cumulativePreview, turn);
+
+            if (ReconcilerAgent.lockEarly(opinions, candidateOps)) {
+                double m = ReconcilerAgent.meanScore(opinions);
+                lastGoodOps = candidateOps;
+                lastRender = cumulativePreview;
+                lastScore = m;
+                return completed(spec, lastGoodOps, cumulativePreview, lastScript,
+                        budget, totalSandboxErrors, m, "swarm lockEarly");
+            }
+
+            ReconcilerAgent.ReconciledCritique reconciled = ReconcilerAgent.reconcileSync(
+                    state, gemini, spec, opinions, cumulativePreview, candidateOps);
+
+            lastCriticNotes = reconciled.summary();
+            lastIssues = reconciled.issues();
+            ArrayList<String> sug = new ArrayList<>();
+            sug.addAll(reconciled.consolidatedPatches());
+            sug.addAll(reconciled.suggestions());
+            lastSuggestions = sug;
+            lastScore = reconciled.score();
             lastGoodOps = candidateOps;
             lastRender = cumulativePreview;
 
             LOGGER.info("L4_TURN element={} turn={} done={} score={} notes={}",
-                    elementId, turn, response.done, verdict.score(),
-                    summarise(verdict.notes()));
+                    elementId, turn, response.done, reconciled.score(),
+                    summarise(reconciled.summary()));
 
-            if (response.done && verdict.approved()) {
+            if (response.done && reconciled.approved()) {
                 return completed(spec, lastGoodOps, cumulativePreview, lastScript,
-                        budget, totalSandboxErrors, verdict.score(), verdict.notes());
+                        budget, totalSandboxErrors, reconciled.score(), reconciled.summary());
             }
-            if (verdict.score() >= 0.95 && !candidateOps.isEmpty()) {
+            if (reconciled.score() >= 0.95 && !candidateOps.isEmpty()) {
                 return completed(spec, lastGoodOps, cumulativePreview, lastScript,
-                        budget, totalSandboxErrors, verdict.score(),
-                        "critic locked early: " + verdict.notes());
+                        budget, totalSandboxErrors, reconciled.score(),
+                        "reconciler high score: " + reconciled.summary());
             }
         }
 
@@ -355,12 +372,6 @@ public final class L4ReplAgent {
 
     private static int resolution(CumulativeBuild cumulative) {
         return cumulative == null ? DEFAULT_RESOLUTION : cumulative.resolution();
-    }
-
-    private static byte[] renderElementPreview(Set<BlockOp> ops, int resolution) {
-        if (ops.isEmpty()) return null;
-        Blueprint.Bounds bounds = new Blueprint.Bounds(resolution, resolution, resolution);
-        return IsoRenderer.renderPng(new ArrayList<>(ops), bounds, RENDER_PPB);
     }
 
     private static byte[] renderWithPreview(CumulativeBuild cumulative, Set<BlockOp> candidateOps) {

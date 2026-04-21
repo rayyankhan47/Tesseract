@@ -169,4 +169,32 @@ public final class BuildState {
         this.eventLog = new CopyOnWriteArrayList<>();
         this.iterationCount = 0;
     }
+
+    // -------------------------------------------------------------------------
+    // Cross-package accessors (subpackages cannot read package-private fields)
+    // -------------------------------------------------------------------------
+
+    public com.rayyan.tesseract.api.CostTracker costTracker() {
+        return costTracker;
+    }
+
+    public VoxelMass massSketch() {
+        return massSketch;
+    }
+
+    public com.rayyan.tesseract.plan.MassPlan massPlan() {
+        return massPlan;
+    }
+
+    /** Selected concept image for vision critics; null if none. */
+    public ReferenceImage primaryReferenceImage() {
+        if (referenceImages.isEmpty()) return null;
+        int idx = Math.max(0, Math.min(selectedConceptIndex, referenceImages.size() - 1));
+        return referenceImages.get(idx);
+    }
+
+    /** §8.2.3 — L4 critic swarm and other phases append replay lines here. */
+    public void appendTimeline(String line) {
+        timeline.add(line);
+    }
 }
