@@ -66,6 +66,8 @@ public final class BuildState {
     com.rayyan.tesseract.plan.MassPlan massPlan;
     /** L2 Decomposer's structural zones (foundation / body / crown / rhythm). Empty until §5.2 runs. */
     final List<com.rayyan.tesseract.plan.StructuralZone> zoneSpecs = new CopyOnWriteArrayList<>();
+    /** L3 Element Designer's per-zone elements, already dependency-sorted. Empty until §5.3 runs. */
+    final List<com.rayyan.tesseract.plan.ElementSpec> elementSpecs = new CopyOnWriteArrayList<>();
 
     // ---- Refactor 3, §4.3 — RAG architectural knowledge ----
     /**

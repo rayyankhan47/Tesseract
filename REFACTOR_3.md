@@ -335,10 +335,10 @@ Legend: [x] complete · [~] in progress · [ ] pending
   - [x] 4.1 Knowledge corpus
   - [x] 4.2 Embedding + retrieval
   - [x] 4.3 Injection into planning
-- [~] Step 5 — Hierarchical Decomposition
+- [x] Step 5 — Hierarchical Decomposition
   - [x] 5.1 L1 ArchitectAgent
   - [x] 5.2 L2 DecomposerAgent
-  - [ ] 5.3 L3 ElementDesignerAgent
+  - [x] 5.3 L3 ElementDesignerAgent
 - [ ] Step 6 — Geometric Toolbox & Sandbox
 - [ ] Step 7 — L4 REPL Agent
 - [ ] Step 8 — Parallel Critic Swarm
