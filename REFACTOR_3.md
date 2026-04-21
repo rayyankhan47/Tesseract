@@ -337,7 +337,7 @@ Legend: [x] complete · [~] in progress · [ ] pending
   - [x] 4.3 Injection into planning
 - [~] Step 5 — Hierarchical Decomposition
   - [x] 5.1 L1 ArchitectAgent
-  - [ ] 5.2 L2 DecomposerAgent
+  - [x] 5.2 L2 DecomposerAgent
   - [ ] 5.3 L3 ElementDesignerAgent
 - [ ] Step 6 — Geometric Toolbox & Sandbox
 - [ ] Step 7 — L4 REPL Agent

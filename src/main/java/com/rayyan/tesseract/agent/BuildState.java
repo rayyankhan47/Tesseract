@@ -64,6 +64,8 @@ public final class BuildState {
     // ---- Refactor 3, §5 — hierarchical decomposition outputs ----
     /** L1 Architect's top-level massing plan; null until §5.1 runs. */
     com.rayyan.tesseract.plan.MassPlan massPlan;
+    /** L2 Decomposer's structural zones (foundation / body / crown / rhythm). Empty until §5.2 runs. */
+    final List<com.rayyan.tesseract.plan.StructuralZone> zoneSpecs = new CopyOnWriteArrayList<>();
 
     // ---- Refactor 3, §4.3 — RAG architectural knowledge ----
     /**
