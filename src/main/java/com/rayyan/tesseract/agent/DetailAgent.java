@@ -76,7 +76,7 @@ public final class DetailAgent {
      * Runs the detail pass asynchronously.
      *
      * <p>Requires {@code state.compiledBlueprint} and {@code state.blueprint} to be set.
-     * Uses the last rendered PNG (if available) as a visual reference for placement.
+     * Text-only Gemini call (Refactor 3 — global render moved to per-element L4 locks).
      */
     public static void run(BuildState state,
                            GeminiClient gemini,
@@ -93,14 +93,8 @@ public final class DetailAgent {
                 state.blueprint != null ? state.blueprint.name : "?",
                 state.compiledBlueprint.ops().size());
 
-        // Use multimodal call when we have a render PNG; fall back to text-only
-        if (state.lastRenderPng != null && state.lastRenderPng.length > 0) {
-            gemini.complete(SYSTEM_PROMPT, userPrompt, state.lastRenderPng, "image/png")
-                  .whenComplete((raw, ex) -> handleResponse(raw, ex, state, onComplete));
-        } else {
-            gemini.complete(SYSTEM_PROMPT, userPrompt)
-                  .whenComplete((raw, ex) -> handleResponse(raw, ex, state, onComplete));
-        }
+        gemini.complete(SYSTEM_PROMPT, userPrompt)
+                .whenComplete((raw, ex) -> handleResponse(raw, ex, state, onComplete));
     }
 
     // -------------------------------------------------------------------------

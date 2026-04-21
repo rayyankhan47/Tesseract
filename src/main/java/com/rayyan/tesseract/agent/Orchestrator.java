@@ -1,15 +1,16 @@
 package com.rayyan.tesseract.agent;
 
 import com.google.gson.Gson;
+import com.rayyan.tesseract.api.EmbeddingClient;
 import com.rayyan.tesseract.api.GeminiClient;
-import com.rayyan.tesseract.blueprint.BlueprintCompileException;
-import com.rayyan.tesseract.blueprint.BlueprintCompiler;
-import com.rayyan.tesseract.blueprint.BlueprintPatcher;
+import com.rayyan.tesseract.api.ImagenClient;
 import com.rayyan.tesseract.paste.BuildPlan;
 import com.rayyan.tesseract.jobs.BuildJobManager;
-import com.rayyan.tesseract.jobs.BuildQueueManager;
-import com.rayyan.tesseract.render.IsoRenderer;
+import com.rayyan.tesseract.placement.SyncPlacer;
 import com.rayyan.tesseract.selection.Selection;
+import com.rayyan.tesseract.blueprint.Blueprint;
+import com.rayyan.tesseract.texture.FractalTexturePipeline;
+import com.rayyan.tesseract.toolbox.ToolboxExtensionStore;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
@@ -17,6 +18,7 @@ import net.minecraft.text.Text;
 import net.minecraft.util.math.BlockPos;
 
 import java.util.ArrayList;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -26,38 +28,29 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Owns the five-stage build pipeline state machine.
+ * Owns the Refactor 3 build pipeline state machine (linear phases 0→9, L4 inner loop).
  *
- * All state mutations happen on the Minecraft server thread. Async agent
+ * <p>All state mutations happen on the Minecraft server thread. Async agent
  * completions call back via {@link #onServerThread}, which uses the player's
  * server reference for in-game builds and {@link #currentServer} for web builds.
- *
- * Usage (in-game):
- *   Orchestrator.getInstance().run(player, buildSelection, contextSelection, prompt, null, null);
- *
- * Usage (web):
- *   String planJson = Orchestrator.getInstance().runWebBuild(prompt, null, null);
  */
 public final class Orchestrator {
 
     private static final Orchestrator INSTANCE = new Orchestrator();
     private static final Logger LOGGER = LoggerFactory.getLogger("tesseract.orchestrator");
-    private static final long BUILD_TIMEOUT_MS    = 5 * 60 * 1_000L;
-    private static final UUID WEB_BUILD_ID        = UUID.nameUUIDFromBytes("web".getBytes());
-    private static final Gson GSON                = new Gson();
+    private static final long BUILD_TIMEOUT_MS = 5 * 60 * 1_000L;
+    private static final UUID WEB_BUILD_ID = UUID.nameUUIDFromBytes("web".getBytes());
+    private static final Gson GSON = new Gson();
 
-    /** Pixels-per-block for IsoRenderer. Smaller → faster render, coarser Gemini Vision read. */
-    private static final int PPB = 12;
-    /** Maximum compile → render → critic → patch iterations. */
-    private static final int MAX_ITERATIONS = 3;
-    /** Wall-clock cap across all critic passes; if exceeded the loop exits early. */
-    private static final long ITERATION_BUDGET_MS = 90_000L;
+    /** §10.3.2 — global LLM spend cap (USD) for the whole build. */
+    private static final double GLOBAL_BUDGET_USD = 2.0;
 
     /** Active builds keyed by player UUID (or WEB_BUILD_ID for web builds). */
     private final Map<UUID, BuildState> activeBuilds = new ConcurrentHashMap<>();
 
-    /** Lazily initialised; missing GEMINI_API_KEY must not crash startup. */
     private GeminiClient gemini;
+    private ImagenClient imagen;
+    private EmbeddingClient embedding;
 
     /**
      * Set each tick by {@link #tick(MinecraftServer)} — used to re-enter the server
@@ -71,16 +64,33 @@ public final class Orchestrator {
         return INSTANCE;
     }
 
+    private GeminiClient getGemini() {
+        if (gemini == null) {
+            gemini = GeminiClient.fromEnv();
+        }
+        return gemini;
+    }
+
+    private ImagenClient getImagen() {
+        if (imagen == null) {
+            imagen = ImagenClient.fromEnv();
+        }
+        return imagen;
+    }
+
+    private EmbeddingClient getEmbedding() {
+        if (embedding == null) {
+            embedding = EmbeddingClient.fromEnv();
+        }
+        return embedding;
+    }
+
     // -------------------------------------------------------------------------
     // Public entry points
     // -------------------------------------------------------------------------
 
     /**
      * Starts a new in-game build pipeline for the given player.
-     *
-     * @param contextSelection nullable — scanned context region
-     * @param imageBytes       nullable — reference image bytes
-     * @param imageMimeType    nullable — MIME type of imageBytes
      */
     public void run(ServerPlayerEntity player,
                     Selection buildSelection,
@@ -93,15 +103,13 @@ public final class Orchestrator {
         activeBuilds.put(playerId, state);
 
         emit(state, "Orchestrator", "Starting: \"" + prompt + "\"");
-        AgentProgressManager.start(player, "interpreting");
-        transition(state, OrchestratorState.INTERPRETING);
+        AgentProgressManager.start(player, "concept");
+        transition(state, OrchestratorState.CONCEPT_SYNTHESIZING);
     }
 
     /**
      * Starts a web-triggered build (no real player or world).
      * Blocks until the pipeline completes (or times out after 120 s).
-     *
-     * @return serialised plan JSON {@code {"meta":{...},"ops":[...]}} ready for plan_server.py
      */
     public String runWebBuild(String prompt, byte[] imageBytes, String imageMimeType)
             throws Exception {
@@ -114,7 +122,7 @@ public final class Orchestrator {
 
         Selection syntheticSelection = new Selection();
         syntheticSelection.setCornerA(BlockPos.ORIGIN);
-        syntheticSelection.setCornerB(new BlockPos(15, 11, 15)); // 16×12×16
+        syntheticSelection.setCornerB(new BlockPos(15, 11, 15));
 
         java.util.concurrent.CompletableFuture<String> future = new java.util.concurrent.CompletableFuture<>();
         BuildState state = new BuildState(WEB_BUILD_ID, null, prompt, imageBytes, imageMimeType, syntheticSelection);
@@ -125,7 +133,7 @@ public final class Orchestrator {
 
         currentServer.execute(() -> {
             emit(state, "Orchestrator", "Web build starting: \"" + prompt + "\"");
-            transition(state, OrchestratorState.INTERPRETING);
+            transition(state, OrchestratorState.CONCEPT_SYNTHESIZING);
         });
 
         return future.get(120, TimeUnit.SECONDS);
@@ -138,7 +146,6 @@ public final class Orchestrator {
     void transition(BuildState state, OrchestratorState next) {
         OrchestratorState.assertTransition(state.state, next);
 
-        // Record how long the previous state took, then advance
         long now = System.currentTimeMillis();
         long durationMs = now - state.stateEnteredAtMs;
         state.timeline.add(state.state.name() + ":" + durationMs);
@@ -148,179 +155,183 @@ public final class Orchestrator {
 
         switch (next) {
 
-            // ---- Stage 1: Interpretation ----------------------------------------
-            case INTERPRETING -> {
-                emit(state, "Orchestrator", "→ INTERPRETING");
+            case CONCEPT_SYNTHESIZING -> {
+                emit(state, "Orchestrator", "→ CONCEPT_SYNTHESIZING");
                 AgentProgressManager.updateLabel(state.playerId, "Interpreting prompt…");
-                InterpretationAgent.run(state, getGemini(),
-                    () -> onServerThread(state, () -> {
-                        boolean usedImage = state.referenceImageBytes != null;
-                        String pfx = usedImage ? "Interpreted with visual reference: " : "Interpreted: ";
-                        emit(state, "InterpretationAgent",
-                                pfx + state.spec.type + " (" + state.spec.style + "), "
-                                + state.spec.width + "×" + state.spec.height + "×" + state.spec.depth
-                                + (state.spec.features != null && !state.spec.features.isEmpty()
-                                        ? ", features: " + String.join(", ", state.spec.features) : ""));
-                        synthesizeSelectionFromSpec(state);
-                        transition(state, OrchestratorState.BLUEPRINTING);
-                    }),
-                    err -> onServerThread(state, () -> failBuild(state, err)));
-            }
-
-            // ---- Stage 2: Blueprint planning ------------------------------------
-            case BLUEPRINTING -> {
-                emit(state, "Orchestrator", "→ BLUEPRINTING");
-                AgentProgressManager.updateLabel(state.playerId, "Blueprint drafting…");
-                BlueprintPlanningAgent.run(state, getGemini(),
-                    () -> onServerThread(state, () -> {
-                        emit(state, "BlueprintPlanningAgent",
-                                "Blueprint '" + state.blueprint.name + "': "
-                                + state.blueprint.primitives.size() + " primitives");
-                        state.iterationStartMs = System.currentTimeMillis();
-                        transition(state, OrchestratorState.COMPILING);
-                    }),
-                    err -> onServerThread(state, () -> failBuild(state, err)));
-            }
-
-            // ---- Stage 3: Compile -----------------------------------------------
-            case COMPILING -> {
-                String passLabel = state.iterationCount > 0
-                        ? " (pass " + (state.iterationCount + 1) + "/" + MAX_ITERATIONS + ")"
-                        : "";
-                emit(state, "Compiler", "Compiling blueprint" + passLabel + "…");
-                AgentProgressManager.updateLabel(state.playerId, "Compiling" + passLabel + "…");
-                try {
-                    state.compiledBlueprint = BlueprintCompiler.compile(state.blueprint);
-                    if (state.compiledBlueprint.ops().isEmpty()) {
-                        failBuild(state, "Blueprint compiled to zero ops — try a different prompt.");
-                        return;
-                    }
-                    emit(state, "Compiler", state.compiledBlueprint.ops().size() + " block ops compiled.");
-                    transition(state, OrchestratorState.RENDERING);
-                } catch (BlueprintCompileException e) {
-                    failBuild(state, "Blueprint compile error: " + e.getMessage());
-                }
-            }
-
-            // ---- Stage 4: Render ------------------------------------------------
-            case RENDERING -> {
-                emit(state, "Renderer", "Rendering isometric view" + 
-                        (state.iterationCount > 0 ? " (pass " + (state.iterationCount + 1) + "/" + MAX_ITERATIONS + ")" : "") + "…");
-                AgentProgressManager.updateLabel(state.playerId, "Rendering view…");
-                try {
-                    state.lastRenderPng = IsoRenderer.renderPng(
-                            state.compiledBlueprint.ops(), state.blueprint.bounds, PPB);
-                    writeDebugBlueprint(state);
-                    IsoRenderer.writeDebugCopy(state.lastRenderPng,
-                            state.playerId.toString() + "_iter" + state.iterationCount,
-                            state.iterationCount);
-                } catch (Exception e) {
-                    LOGGER.warn("Renderer: PNG generation failed — skipping critic, proceeding to DETAILING", e);
-                    emit(state, "Renderer", "Render failed — skipping critic: " + e.getMessage());
-                    finalizeOps(state);
-                    transition(state, OrchestratorState.DETAILING);
+                if (state.spec == null) {
+                    InterpretationAgent.run(state, getGemini(),
+                            () -> onServerThread(state, () -> {
+                                emitInterpreted(state);
+                                synthesizeSelectionFromSpec(state);
+                                transition(state, OrchestratorState.CONCEPT_SYNTHESIZING);
+                            }),
+                            err -> onServerThread(state, () -> failBuild(state, err)));
                     return;
                 }
+                if (budgetExceeded(state)) {
+                    completeBudgetEarly(state);
+                    return;
+                }
+                if (state.textOnlyFallback) {
+                    ensureFallbackMass(state);
+                    AgentProgressManager.updateLabel(state.playerId, "RAG retrieval…");
+                    transition(state, OrchestratorState.RAG_QUERYING);
+                    return;
+                }
+                AgentProgressManager.updateLabel(state.playerId, "Concept synthesis…");
+                ConceptAgent.run(state, getImagen(), getGemini(),
+                        () -> onServerThread(state, () -> {
+                            if (budgetExceeded(state)) {
+                                completeBudgetEarly(state);
+                                return;
+                            }
+                            transition(state, OrchestratorState.MASS_EXTRACTING);
+                        }),
+                        err -> onServerThread(state, () -> {
+                            enterTextOnlyFallback(state, err);
+                            ensureFallbackMass(state);
+                            if (budgetExceeded(state)) {
+                                completeBudgetEarly(state);
+                                return;
+                            }
+                            transition(state, OrchestratorState.RAG_QUERYING);
+                        }));
+            }
 
-                // Single-iteration fast path: tesseract.iterate=false skips critic
-                boolean iterateEnabled =
-                        !"false".equalsIgnoreCase(System.getProperty("tesseract.iterate", "true"));
-                if (!iterateEnabled || MAX_ITERATIONS <= 1) {
-                    emit(state, "Renderer", "Iteration disabled — skipping critic.");
-                    finalizeOps(state);
-                    transition(state, OrchestratorState.DETAILING);
-                } else {
-                    transition(state, OrchestratorState.CRITIQUING_VISUAL);
+            case MASS_EXTRACTING -> {
+                emit(state, "Orchestrator", "→ MASS_EXTRACTING");
+                AgentProgressManager.updateLabel(state.playerId, "3D mass extraction…");
+                if (budgetExceeded(state)) {
+                    completeBudgetEarly(state);
+                    return;
+                }
+                MassExtractionAgent.run(state, getGemini(),
+                        () -> onServerThread(state, () -> {
+                            if (budgetExceeded(state)) {
+                                completeBudgetEarly(state);
+                                return;
+                            }
+                            transition(state, OrchestratorState.RAG_QUERYING);
+                        }),
+                        err -> onServerThread(state, () -> {
+                            enterTextOnlyFallback(state, err);
+                            ensureFallbackMass(state);
+                            if (budgetExceeded(state)) {
+                                completeBudgetEarly(state);
+                                return;
+                            }
+                            transition(state, OrchestratorState.RAG_QUERYING);
+                        }));
+            }
+
+            case RAG_QUERYING -> {
+                emit(state, "Orchestrator", "→ RAG_QUERYING");
+                AgentProgressManager.updateLabel(state.playerId, "Architectural RAG…");
+                RagAgent.run(state, getGemini(), getEmbedding())
+                        .whenComplete((ok, ex) -> onServerThread(state, () -> {
+                            if (ex != null) {
+                                LOGGER.warn("RagAgent: {}", ex.getMessage());
+                            }
+                            if (budgetExceeded(state)) {
+                                completeBudgetEarly(state);
+                                return;
+                            }
+                            transition(state, OrchestratorState.L1_ARCHITECTING);
+                        }));
+            }
+
+            case L1_ARCHITECTING -> {
+                emit(state, "Orchestrator", "→ L1_ARCHITECTING");
+                AgentProgressManager.updateLabel(state.playerId, "L1 architect…");
+                L1ArchitectAgent.run(state, getGemini())
+                        .whenComplete((plan, ex) -> onServerThread(state, () -> {
+                            if (ex != null) {
+                                failBuild(state, "L1: " + ex.getMessage());
+                                return;
+                            }
+                            if (budgetExceeded(state)) {
+                                completeBudgetEarly(state);
+                                return;
+                            }
+                            transition(state, OrchestratorState.L2_DECOMPOSING);
+                        }));
+            }
+
+            case L2_DECOMPOSING -> {
+                emit(state, "Orchestrator", "→ L2_DECOMPOSING");
+                AgentProgressManager.updateLabel(state.playerId, "L2 zones…");
+                L2DecomposerAgent.run(state, getGemini())
+                        .whenComplete((zones, ex) -> onServerThread(state, () -> {
+                            if (ex != null) {
+                                failBuild(state, "L2: " + ex.getMessage());
+                                return;
+                            }
+                            if (budgetExceeded(state)) {
+                                completeBudgetEarly(state);
+                                return;
+                            }
+                            transition(state, OrchestratorState.L3_DESIGNING);
+                        }));
+            }
+
+            case L3_DESIGNING -> {
+                emit(state, "Orchestrator", "→ L3_DESIGNING");
+                AgentProgressManager.updateLabel(state.playerId, "L3 elements…");
+                L3ElementDesignerAgent.run(state, getGemini())
+                        .whenComplete((elements, ex) -> onServerThread(state, () -> {
+                            if (ex != null) {
+                                failBuild(state, "L3: " + ex.getMessage());
+                                return;
+                            }
+                            if (budgetExceeded(state)) {
+                                completeBudgetEarly(state);
+                                return;
+                            }
+                            transition(state, OrchestratorState.L4_ITERATING);
+                        }));
+            }
+
+            case L4_ITERATING -> {
+                emit(state, "Orchestrator", "→ L4_ITERATING");
+                AgentProgressManager.updateLabel(state.playerId, "L4 geometry…");
+                if (budgetExceeded(state)) {
+                    completeBudgetEarly(state);
+                    return;
+                }
+                try {
+                    ToolboxExtensionStore ext = ToolboxExtensionStore.atDefaultPath().load();
+                    ElementScheduler.runAll(state, getGemini(), ext);
+                    if (state.compiledBlueprint == null && state.cumulativeBuild != null) {
+                        state.compiledBlueprint = state.cumulativeBuild.toCompiledBlueprint();
+                    }
+                    reportDrift(state);
+                    if (budgetExceeded(state)) {
+                        completeBudgetEarly(state);
+                        return;
+                    }
+                    transition(state, OrchestratorState.TEXTURING);
+                } catch (Exception e) {
+                    failBuild(state, "L4: " + e.getMessage());
                 }
             }
 
-            // ---- Stage 5: Visual critique + patch loop --------------------------
-            case CRITIQUING_VISUAL -> {
-                int pass = state.iterationCount + 1;
-                emit(state, "VisualCritic", "Critiquing build (pass " + pass + "/" + MAX_ITERATIONS + ")…");
-                AgentProgressManager.updateLabel(state.playerId,
-                        "Visual critic pass " + pass + "/" + MAX_ITERATIONS + "…");
-
-                VisualCriticAgent.run(state, getGemini(),
-                    critique -> onServerThread(state, () -> {
-                        // Surface issues to the player
-                        for (String issue : critique.issues()) {
-                            emit(state, "VisualCritic", "Issue: " + issue);
-                        }
-                        writeDebugCritique(state, critique);
-
-                        boolean budgetExceeded = (System.currentTimeMillis() - state.iterationStartMs)
-                                > ITERATION_BUDGET_MS;
-                        boolean maxReached = (state.iterationCount + 1) >= MAX_ITERATIONS;
-                        boolean shouldExit = critique.satisfied() || maxReached || budgetExceeded;
-
-                        if (shouldExit) {
-                            if (critique.satisfied()) {
-                                emit(state, "VisualCritic", "Build looks coherent — finalizing.");
-                            } else if (budgetExceeded) {
-                                emit(state, "VisualCritic", "Iteration budget exceeded — proceeding.");
-                            } else {
-                                emit(state, "VisualCritic", "Max iterations reached — proceeding.");
-                            }
-                            finalizeOps(state);
-                            transition(state, OrchestratorState.DETAILING);
-                        } else {
-                            // Apply patches inline; PATCHING state is a named feedback waypoint
-                            com.rayyan.tesseract.blueprint.Blueprint patched =
-                                    BlueprintPatcher.apply(state.blueprint, critique.patch());
-                            if (patched == state.blueprint) {
-                                // Patch was a no-op — treat as satisfied
-                                emit(state, "VisualCritic", "Patch was no-op — treating as satisfied.");
-                                finalizeOps(state);
-                                transition(state, OrchestratorState.DETAILING);
-                            } else {
-                                state.blueprint = patched;
-                                state.iterationCount++;
-                                emit(state, "VisualCritic",
-                                        "Blueprint patched — recompiling (pass "
-                                        + (state.iterationCount + 1) + "/" + MAX_ITERATIONS + ")");
-                                transition(state, OrchestratorState.PATCHING);
-                            }
-                        }
-                    }),
-                    // Critic error — fail soft, proceed with current build
-                    err -> onServerThread(state, () -> {
-                        LOGGER.warn("VisualCritic failed: {} — proceeding with current blueprint", err);
-                        emit(state, "VisualCritic", "Critic error — proceeding: " + err);
-                        finalizeOps(state);
-                        transition(state, OrchestratorState.DETAILING);
-                    }));
+            case TEXTURING -> {
+                emit(state, "Orchestrator", "→ TEXTURING");
+                AgentProgressManager.updateLabel(state.playerId, "Texture pass…");
+                java.util.List<BlockOp> base = state.compiledBlueprint != null
+                        ? new ArrayList<>(state.compiledBlueprint.ops())
+                        : new ArrayList<>();
+                String seed = String.valueOf(state.playerId)
+                        + ":" + (state.originalPrompt == null ? "" : state.originalPrompt.hashCode());
+                java.util.List<BlockOp> textured = FractalTexturePipeline.apply(state, base, seed);
+                state.completedOps = new ArrayList<>(textured);
+                emit(state, "FractalTexturePipeline", textured.size() + " ops after texture pass.");
+                transition(state, OrchestratorState.PLACING);
             }
 
-            // ---- Stage 6: Patching (named state for player feedback) ------------
-            case PATCHING -> {
-                emit(state, "Orchestrator", "→ COMPILING (patched blueprint)");
-                transition(state, OrchestratorState.COMPILING);
-            }
-
-            // ---- Stage 7: Detail decoration ---------------------------------
-            case DETAILING -> {
-                emit(state, "Orchestrator", "→ DETAILING");
-                AgentProgressManager.updateLabel(state.playerId, "Decoration pass…");
-                DetailAgent.run(state, getGemini(),
-                    () -> onServerThread(state, () -> {
-                        emit(state, "DetailAgent",
-                                state.completedOps.size() + " total ops after decoration.");
-                        transition(state, OrchestratorState.PLACING);
-                    }),
-                    err -> onServerThread(state, () -> {
-                        // Decoration failure is non-fatal — proceed with structural ops only
-                        LOGGER.warn("DetailAgent failed: {} — proceeding without decoration", err);
-                        emit(state, "DetailAgent", "Decoration skipped: " + err);
-                        if (state.completedOps.isEmpty()) finalizeOps(state);
-                        transition(state, OrchestratorState.PLACING);
-                    }));
-            }
-
-            // ---- Stage 8: Placement --------------------------------------------
             case PLACING -> {
-                if (state.completedOps.isEmpty()) {
-                    emit(state, "Orchestrator", "No ops to place — blueprint produced zero blocks.");
+                if (state.completedOps == null || state.completedOps.isEmpty()) {
+                    emit(state, "Orchestrator", "No ops to place — geometry produced zero blocks.");
                     transition(state, OrchestratorState.COMPLETE);
                     return;
                 }
@@ -335,34 +346,78 @@ public final class Orchestrator {
                 }
 
                 ServerWorld world = (ServerWorld) state.player.getWorld();
+                MinecraftServer srv = world.getServer();
                 AgentProgressManager.updateLabel(state.playerId, "Placing blocks…");
-                BuildQueueManager.startComponentBuild(
-                    state.playerId, world, state.placementOrigin, state.completedOps,
-                    () -> onServerThread(state, () -> {
-                        emit(state, "Placement", "Placed " + state.completedOps.size() + " blocks.");
-                        transition(state, OrchestratorState.COMPLETE);
-                    }));
+                SyncPlacer.placeAll(world, state.placementOrigin, state.completedOps, srv, result -> {
+                    String msg = "Placed " + result.placed() + " blocks.";
+                    if (result.failures() > 0) {
+                        msg += " (" + result.failures() + " failed.)";
+                    }
+                    emit(state, "Placement", msg);
+                    transition(state, OrchestratorState.COMPLETE);
+                });
             }
 
-            // ---- Terminal states ------------------------------------------------
-            case COMPLETE -> {
-                // Seal the COMPLETE entry so the last state's duration is recorded
-                long completedAt = System.currentTimeMillis();
-                state.timeline.add("COMPLETE:" + (completedAt - state.stateEnteredAtMs));
-
-                emit(state, "Build", "Complete — " + state.completedOps.size() + " blocks, "
-                        + state.iterationCount + " critic pass(es).");
-                LOGGER.info("Timeline: {}", buildTimeline(state));
-
-                AgentProgressManager.flashComplete(state.playerId);
-                BuildJobManager.finish(state.playerId);
-                activeBuilds.remove(state.playerId);
-                if (state.webBuildFuture != null) {
-                    state.webBuildFuture.complete(buildPlanJson(state));
-                }
-            }
+            case COMPLETE -> finalizeComplete(state);
             case FAILED -> { /* failBuild() handles cleanup */ }
-            case IDLE   -> { /* start state */ }
+            case IDLE -> { /* initial constructor only */ }
+        }
+    }
+
+    private void emitInterpreted(BuildState state) {
+        boolean usedImage = state.referenceImageBytes != null;
+        String pfx = usedImage ? "Interpreted with visual reference: " : "Interpreted: ";
+        emit(state, "InterpretationAgent",
+                pfx + state.spec.type + " (" + state.spec.style + "), "
+                        + state.spec.width + "×" + state.spec.height + "×" + state.spec.depth
+                        + (state.spec.features != null && !state.spec.features.isEmpty()
+                        ? ", features: " + String.join(", ", state.spec.features) : ""));
+    }
+
+    private static boolean budgetExceeded(BuildState state) {
+        return state.costTracker().totalUsd() > GLOBAL_BUDGET_USD;
+    }
+
+    /**
+     * §10.3.2 — ship early with chat copy; texture+place if L4 already produced ops.
+     */
+    private void completeBudgetEarly(BuildState state) {
+        double spent = state.costTracker().totalUsd();
+        emit(state, "Orchestrator", String.format(Locale.US,
+                "$%.2f spent — global $%.2f budget exceeded; shipping early.",
+                spent, GLOBAL_BUDGET_USD));
+
+        boolean hasGeometry = state.compiledBlueprint != null
+                && state.compiledBlueprint.ops() != null
+                && !state.compiledBlueprint.ops().isEmpty();
+
+        if (hasGeometry) {
+            transition(state, OrchestratorState.TEXTURING);
+        } else {
+            transition(state, OrchestratorState.COMPLETE);
+        }
+    }
+
+    private void finalizeComplete(BuildState state) {
+        long completedAt = System.currentTimeMillis();
+        state.timeline.add("COMPLETE:" + (completedAt - state.stateEnteredAtMs));
+
+        emit(state, "Build", "Complete — " + state.completedOps.size() + " blocks, "
+                + state.elementLocks.size() + " element lock(s).");
+        if (state.costTracker.totalCalls() > 0) {
+            emit(state, "Cost", state.costTracker.summaryLine());
+            LOGGER.info("Cost breakdown:\n{}", state.costTracker.fullBreakdown());
+        }
+        if (!state.ragCitations.isEmpty()) {
+            LOGGER.info("RAG citations: {}", String.join(", ", state.ragCitations));
+        }
+        LOGGER.info("Timeline: {}", buildTimeline(state));
+
+        AgentProgressManager.flashComplete(state.playerId);
+        BuildJobManager.finish(state.playerId);
+        activeBuilds.remove(state.playerId);
+        if (state.webBuildFuture != null) {
+            state.webBuildFuture.complete(buildPlanJson(state));
         }
     }
 
@@ -378,10 +433,26 @@ public final class Orchestrator {
     }
 
     /**
-     * Discards all active build state — called on server start so stale locks
-     * from a previous world load (within the same game session) do not block new builds.
-     * Any pending web build futures are completed exceptionally.
+     * §3.3.3 — when a vision-dependent phase fails catastrophically, flip text-only mode.
      */
+    void enterTextOnlyFallback(BuildState state, String reason) {
+        if (state.textOnlyFallback) return;
+        state.textOnlyFallback = true;
+        LOGGER.warn("PHASE_FALLBACK mode=text_only reason={}", reason);
+        emit(state, "Orchestrator",
+                "Visual pipeline unavailable — falling back to text-only planning (" + reason + ")");
+    }
+
+    private void ensureFallbackMass(BuildState state) {
+        if (state.massSketch != null) return;
+        if (state.spec == null) {
+            LOGGER.warn("ensureFallbackMass: no BuildSpec — using default envelope");
+        }
+        state.massSketch = VoxelMass.syntheticFootprintFromSpec(state.spec);
+        emit(state, "Orchestrator", "Synthetic 16³ silhouette for text-only path ("
+                + state.massSketch.filledCount() + " voxels).");
+    }
+
     public void reset() {
         for (BuildState state : activeBuilds.values()) {
             AgentProgressManager.stop(state.playerId);
@@ -450,10 +521,6 @@ public final class Orchestrator {
     // Helpers
     // -------------------------------------------------------------------------
 
-    /**
-     * Queues {@code action} on the Minecraft server thread.
-     * Uses the player's server for in-game builds, {@link #currentServer} for web builds.
-     */
     private void onServerThread(BuildState state, Runnable action) {
         MinecraftServer srv = (state.player != null && state.player.getServer() != null)
                 ? state.player.getServer()
@@ -461,28 +528,18 @@ public final class Orchestrator {
         if (srv != null) {
             srv.execute(action);
         } else {
-            action.run(); // last-resort fallback — should not occur in normal usage
+            action.run();
         }
     }
 
-    /**
-     * Replaces the 1×1×1 anchor selection with a real bounding box derived from
-     * the BuildSpec dimensions, centered horizontally on the anchor point.
-     * Y starts at the anchor block (builds upward).
-     *
-     * Called on the server thread immediately after InterpretationAgent completes.
-     * No-op for web builds, which have their own synthetic selection.
-     */
     private static void synthesizeSelectionFromSpec(BuildState state) {
         if (state.isWebBuild || state.buildSelection == null) return;
-        BlockPos anchor = state.buildSelection.getMin(); // was cornerA == cornerB
+        BlockPos anchor = state.buildSelection.getMin();
         if (anchor == null) return;
-
         int w = Math.max(4, state.spec.width);
         int h = Math.max(4, state.spec.height);
         int d = Math.max(4, state.spec.depth);
 
-        // Centre the footprint horizontally on the anchor; build upward from anchor.y
         int halfW = w / 2;
         int halfD = d / 2;
         BlockPos newMin = new BlockPos(anchor.getX() - halfW, anchor.getY(), anchor.getZ() - halfD);
@@ -498,74 +555,46 @@ public final class Orchestrator {
                 w, h, d, newMin.getX(), newMin.getY(), newMin.getZ());
     }
 
-    private GeminiClient getGemini() {
-        if (gemini == null) {
-            gemini = GeminiClient.fromEnv();
+    private void reportDrift(BuildState state) {
+        if (state.massSketch == null || state.compiledBlueprint == null) return;
+        Blueprint.Bounds bounds = state.blueprint != null ? state.blueprint.bounds : null;
+        if (bounds == null && state.buildSelection != null && state.buildSelection.isComplete()) {
+            bounds = VoxelMassRenderer.deriveBounds(state.buildSelection);
         }
-        return gemini;
-    }
-
-    /**
-     * Copies the compiled blueprint ops into {@code state.completedOps} so that
-     * downstream stages (DETAILING, PLACING) always see a populated list.
-     */
-    private static void finalizeOps(BuildState state) {
-        if (state.compiledBlueprint != null) {
-            state.completedOps = new ArrayList<>(state.compiledBlueprint.ops());
-        }
-    }
-
-    /**
-     * If debug mode is active, writes {@code iterN_blueprint.json} alongside the
-     * existing debug output directory used by IsoRenderer.
-     *
-     * @see IsoRenderer#DEBUG_PROP
-     */
-    private void writeDebugBlueprint(BuildState state) {
-        if (!IsoRenderer.isDebugEnabled()) return;
         try {
-            java.nio.file.Path dir  = IsoRenderer.debugDir();
-            java.nio.file.Path file = dir.resolve("iter" + state.iterationCount + "_blueprint.json");
-            java.nio.file.Files.writeString(file, new Gson().toJson(state.blueprint));
+            double drift = SilhouetteMetrics.drift(
+                    state.compiledBlueprint.ops(),
+                    state.massSketch,
+                    bounds);
+            state.lastSilhouetteDrift = drift;
+            String tag = SilhouetteMetrics.classify(drift);
+            String msg = String.format("Silhouette drift: %.1f%% (%s)", drift * 100.0, tag);
+            if (SilhouetteMetrics.shouldRollback(drift)) {
+                msg += " — DRIFT_ROLLBACK_REQUESTED";
+            }
+            emit(state, "SilhouetteMetrics", msg);
         } catch (Exception e) {
-            LOGGER.warn("Failed to write debug blueprint: {}", e.getMessage());
+            LOGGER.warn("SilhouetteMetrics: failed to compute drift — {}", e.getMessage());
         }
     }
 
-    /**
-     * If debug mode is active, writes {@code iterN_critique.json}.
-     */
-    private void writeDebugCritique(BuildState state, Critique critique) {
-        if (!IsoRenderer.isDebugEnabled()) return;
-        try {
-            java.nio.file.Path dir  = IsoRenderer.debugDir();
-            java.nio.file.Path file = dir.resolve("iter" + state.iterationCount + "_critique.json");
-            java.nio.file.Files.writeString(file, new Gson().toJson(critique));
-        } catch (Exception e) {
-            LOGGER.warn("Failed to write debug critique: {}", e.getMessage());
-        }
-    }
-
-    /**
-     * Builds a one-line timeline string from the state timeline entries.
-     * Format: {@code IDLE → INTERPRETING(1.2s) → BLUEPRINTING(4.3s) → … → COMPLETE}
-     */
     private static String buildTimeline(BuildState state) {
         if (state.timeline.isEmpty()) return "IDLE → COMPLETE";
         StringBuilder sb = new StringBuilder();
         for (String entry : state.timeline) {
             int sep = entry.lastIndexOf(':');
-            if (sep < 0) { sb.append(entry).append(" → "); continue; }
-            String name   = entry.substring(0, sep);
-            long   dms    = Long.parseLong(entry.substring(sep + 1));
+            if (sep < 0) {
+                sb.append(entry).append(" → ");
+                continue;
+            }
+            String name = entry.substring(0, sep);
+            long dms = Long.parseLong(entry.substring(sep + 1));
             sb.append(name).append("(").append(dms / 1000.0).append("s) → ");
         }
-        // Remove trailing " → "
         if (sb.length() >= 4) sb.setLength(sb.length() - 4);
         return sb.toString();
     }
 
-    /** Serialises the completed build as a { meta, ops } JSON string for the web dashboard. */
     private static String buildPlanJson(BuildState state) {
         BuildPlan plan = new BuildPlan();
         plan.ops = new ArrayList<>(state.completedOps);

@@ -2,6 +2,8 @@ package com.rayyan.tesseract.agent;
 
 import com.google.gson.*;
 import com.rayyan.tesseract.api.GeminiClient;
+import com.rayyan.tesseract.api.GeminiClient.ImagePart;
+import com.rayyan.tesseract.api.TaskKind;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -81,16 +83,16 @@ public final class VisualCriticAgent {
     /**
      * Runs a visual critique pass asynchronously.
      *
-     * <p>Requires {@code state.lastRenderPng} to be set (call {@link
-     * com.rayyan.tesseract.render.IsoRenderer#renderPng} first) and
-     * {@code state.blueprint} to be the current blueprint.
+     * <p>Requires an isometric render PNG (e.g. from {@link
+     * com.rayyan.tesseract.render.IsoRenderer#renderPng}) and {@code state.blueprint}.
      */
     public static void run(BuildState state,
+                           byte[] renderPng,
                            GeminiClient gemini,
                            Consumer<Critique> onComplete,
                            Consumer<String> onError) {
-        if (state.lastRenderPng == null || state.lastRenderPng.length == 0) {
-            LOGGER.error("VisualCriticAgent: lastRenderPng is null — cannot critique without a render");
+        if (renderPng == null || renderPng.length == 0) {
+            LOGGER.error("VisualCriticAgent: render PNG is null — cannot critique without a render");
             onError.accept("VisualCriticAgent: no render PNG available");
             return;
         }
@@ -101,12 +103,25 @@ public final class VisualCriticAgent {
         }
 
         String userPrompt = buildUserPrompt(state);
-        LOGGER.info("VisualCriticAgent: critiquing '{}' (iter {})", state.blueprint.name, state.iterationCount);
+        LOGGER.info("VisualCriticAgent: critiquing '{}'", state.blueprint.name);
 
-        gemini.complete(SYSTEM_PROMPT, userPrompt, state.lastRenderPng, "image/png")
+        // 1.3.2 — attach the primary concept reference image (if Phase 0 populated it)
+        // alongside the current render so the critic compares against the visual north star.
+        List<ImagePart> images = new ArrayList<>();
+        images.add(new ImagePart(renderPng, "image/png"));
+        ReferenceImage primary = primaryReference(state);
+        if (primary != null) {
+            images.add(new ImagePart(primary.bytes(), primary.mimeType()));
+        }
+
+        // §3.1.2 routing + §3.3.1 optional critic semantics: routed via
+        // TaskKind.CRITIC_INNER (ModelSpec.isOptional=true). Cost attributed to
+        // the per-build tracker for the §3.1.3 summary.
+        gemini.call(TaskKind.CRITIC_INNER, SYSTEM_PROMPT, userPrompt, images, state.costTracker)
               .whenComplete((raw, ex) -> {
                   if (ex != null) {
-                      LOGGER.warn("VisualCriticAgent: Gemini call failed: {}", ex.getMessage());
+                      // §3.3.1 — critic failure is not fatal; orchestrator logs CRITIC_SKIPPED.
+                      LOGGER.warn("VisualCriticAgent: CRITIC_SKIPPED — Gemini call failed: {}", ex.getMessage());
                       onError.accept("VisualCriticAgent: Gemini call failed: " + ex.getMessage());
                       return;
                   }
@@ -138,10 +153,41 @@ public final class VisualCriticAgent {
         }
         sb.append("Current blueprint (").append(state.blueprint.primitives.size())
           .append(" primitives):\n").append(state.blueprint.rawJson).append("\n\n");
-        sb.append("The attached image shows the isometric render of this blueprint ");
-        sb.append("(front view on left, back view on right).\n\n");
-        sb.append("Does this look correct? Respond with the JSON critique object.");
+
+        ReferenceImage primary = primaryReference(state);
+        if (primary != null) {
+            sb.append("Attached images:\n");
+            sb.append("  [0] Isometric render of the CURRENT build (front view left, back view right).\n");
+            sb.append("  [1] CONCEPT REFERENCE image — the visual north star. ");
+            sb.append("Style: ").append(primary.variation() == null ? "n/a" : primary.variation()).append(".\n\n");
+            sb.append("Compare image [0] (current build) to image [1] (concept reference). ");
+            sb.append("Issues should describe how the render fails to match the concept. ");
+            sb.append("Patches should move the blueprint toward image [1].\n\n");
+        } else {
+            sb.append("The attached image shows the isometric render of this blueprint ");
+            sb.append("(front view on left, back view on right).\n\n");
+        }
+
+        // §2.3.1 — co-referenced truth: include the voxel mass sketch (when
+        // available) alongside the concept image so the critic judges the
+        // render against both sources.
+        if (state.massSketch != null) {
+            sb.append("3D MASS SKETCH (the agreed silhouette envelope for this build):\n");
+            sb.append("```\n").append(state.massSketch.toAsciiLayersCompact()).append("```\n");
+            sb.append("Any build geometry that lands outside this silhouette is drift — ");
+            sb.append("flag and patch it toward the envelope.\n\n");
+        }
+
+        sb.append("Respond with the JSON critique object.");
         return sb.toString();
+    }
+
+    /** Returns the primary concept reference image, or null if Phase 0 has not run. */
+    static ReferenceImage primaryReference(BuildState state) {
+        if (state.referenceImages == null || state.referenceImages.isEmpty()) return null;
+        int idx = state.selectedConceptIndex;
+        if (idx < 0 || idx >= state.referenceImages.size()) idx = 0;
+        return state.referenceImages.get(idx);
     }
 
     // -------------------------------------------------------------------------

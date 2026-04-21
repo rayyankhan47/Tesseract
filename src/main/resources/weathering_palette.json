@@ -1,0 +1,20 @@
+{
+  "baseThreshold": 0.52,
+  "entries": [
+    {
+      "match": ["stone_bricks", "minecraft:stone_bricks"],
+      "variants": ["stone_bricks", "cracked_stone_bricks", "mossy_stone_bricks"],
+      "thresholdSpread": 0.11
+    },
+    {
+      "match": ["cobblestone", "minecraft:cobblestone"],
+      "variants": ["cobblestone", "mossy_cobblestone"],
+      "thresholdSpread": 0.14
+    },
+    {
+      "match": ["deepslate_bricks", "minecraft:deepslate_bricks"],
+      "variants": ["deepslate_bricks", "cracked_deepslate_bricks"],
+      "thresholdSpread": 0.13
+    }
+  ]
+}

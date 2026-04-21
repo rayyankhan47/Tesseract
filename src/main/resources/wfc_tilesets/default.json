@@ -1,0 +1,9 @@
+{
+  "name": "default",
+  "blocks": ["stone_bricks", "mossy_stone_bricks", "cracked_stone_bricks"],
+  "compat": [
+    [true, true, true],
+    [true, true, true],
+    [true, true, true]
+  ]
+}
