@@ -22,7 +22,12 @@ public record MassPlan(
         String overallStyle,
         String narrative,
         List<MajorMass> masses,
-        List<String> citing) {
+        List<String> citing,
+        /**
+         * §9.1.2 — global weathering / organic-detail intensity, 0 (pristine) → 1 (ancient).
+         * Set by L1 from prompt cues ("ruined abbey" → high). Drives noise thresholds.
+         */
+        double age) {
 
     public MassPlan {
         if (overallStyle == null) overallStyle = "unspecified";
@@ -32,6 +37,9 @@ public record MassPlan(
         }
         masses = List.copyOf(masses);
         citing = citing == null ? Collections.emptyList() : List.copyOf(citing);
+        if (Double.isNaN(age)) age = 0.5;
+        if (age < 0.0) age = 0.0;
+        if (age > 1.0) age = 1.0;
     }
 
     /** Smallest AABB enclosing every mass in this plan. */

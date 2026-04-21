@@ -82,11 +82,15 @@ public final class L1ArchitectAgent {
               - Draw vocabulary (style words, features, proportions) from the
                 retrieved corpus entries. Cite corpus ids you used.
 
+            Optional key "age" (0.0–1.0): building weathering / ruin intensity for
+            the non-LLM texture pass after geometry; omit to default 0.5.
+
             Return a single JSON object matching this schema — no prose, no
             markdown fences, no code blocks:
             {
               "overallStyle": "<style-word>",
               "narrative": "<one paragraph rationale>",
+              "age": 0.0,
               "masses": [
                 {
                   "label": "<snake_case>",
@@ -296,6 +300,13 @@ public final class L1ArchitectAgent {
         String style = stringOr(obj, "overallStyle", "unspecified");
         String narrative = stringOr(obj, "narrative", "");
         List<String> planCiting = stringArray(obj, "citing");
+        double age = 0.5;
+        if (obj.has("age") && obj.get("age").isJsonPrimitive()) {
+            age = obj.get("age").getAsDouble();
+            if (Double.isNaN(age)) age = 0.5;
+            if (age < 0.0) age = 0.0;
+            if (age > 1.0) age = 1.0;
+        }
 
         JsonArray massesArr = obj.getAsJsonArray("masses");
         if (massesArr == null || massesArr.size() == 0) {
@@ -314,7 +325,7 @@ public final class L1ArchitectAgent {
             List<String> citing = stringArray(m, "citing");
             masses.add(new MajorMass(label, role, bounds, citing));
         }
-        return new MassPlan(style, narrative, masses, planCiting);
+        return new MassPlan(style, narrative, masses, planCiting, age);
     }
 
     /**
