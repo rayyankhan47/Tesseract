@@ -350,7 +350,10 @@ Legend: [x] complete · [~] in progress · [ ] pending
   - [x] 8.1 Critic specialization (5 seats)
   - [x] 8.2 Parallel dispatch
   - [x] 8.3 ReconcilerAgent
-- [ ] Step 9 — Fractal Texture Pass
+- [x] Step 9 — Fractal Texture Pass
+  - [x] 9.1 Perlin weathering
+  - [x] 9.2 WFC patterned regions
+  - [x] 9.3 L-system + decay + cracks
 - [ ] Step 10 — State Machine & Orchestrator
 - [ ] Step 11 — Instant Placement
 - [ ] Step 12 — Testing, Prompt Tuning, Cost Audit
