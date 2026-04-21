@@ -61,6 +61,26 @@ public final class BuildState {
      */
     boolean textOnlyFallback;
 
+    // ---- Refactor 3, §4.3 — RAG architectural knowledge ----
+    /**
+     * Top-k corpus entries retrieved for this build's prompt+concept caption.
+     * Empty list means either RAG is not ready or retrieval returned nothing.
+     * Read by L1/L2/L3 agents so they share a single grounded context block.
+     */
+    final List<com.rayyan.tesseract.rag.CorpusEntry> ragContext = new CopyOnWriteArrayList<>();
+    /**
+     * One-line description of the selected concept image, produced by a
+     * cheap Gemini Vision caption call (§4.2.3). Concatenated with the
+     * user prompt to form the retrieval query. Null until the RagAgent runs.
+     */
+    String conceptCaption;
+    /**
+     * Corpus-entry ids that agents have actually cited in their outputs
+     * (§4.3.3). Logged in the COMPLETE timeline so we can audit how often
+     * retrieval actually influences planning.
+     */
+    final java.util.Set<String> ragCitations = java.util.concurrent.ConcurrentHashMap.newKeySet();
+
     // ---- Blueprint DSL pipeline (Refactor 2) ----
     /** Current best Blueprint (updated on each critic patch). Set by BlueprintPlanningAgent. */
     Blueprint blueprint;

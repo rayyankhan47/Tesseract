@@ -361,6 +361,11 @@ public final class Orchestrator {
                     emit(state, "Cost", state.costTracker.summaryLine());
                     LOGGER.info("Cost breakdown:\n{}", state.costTracker.fullBreakdown());
                 }
+                // §4.3.3 — log RAG citation provenance so we can audit which
+                // corpus entries actually influenced this build.
+                if (!state.ragCitations.isEmpty()) {
+                    LOGGER.info("RAG citations: {}", String.join(", ", state.ragCitations));
+                }
                 LOGGER.info("Timeline: {}", buildTimeline(state));
 
                 AgentProgressManager.flashComplete(state.playerId);
