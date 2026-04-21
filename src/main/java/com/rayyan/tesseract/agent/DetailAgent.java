@@ -76,7 +76,7 @@ public final class DetailAgent {
      * Runs the detail pass asynchronously.
      *
      * <p>Requires {@code state.compiledBlueprint} and {@code state.blueprint} to be set.
-     * Uses the last rendered PNG (if available) as a visual reference for placement.
+     * Text-only Gemini call (Refactor 3 — global render moved to per-element L4 locks).
      */
     public static void run(BuildState state,
                            GeminiClient gemini,
