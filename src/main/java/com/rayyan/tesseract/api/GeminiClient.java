@@ -80,6 +80,16 @@ public final class GeminiClient {
      * </pre>
      */
     public static GeminiClient fromEnv() {
+        return new GeminiClient(resolveApiKey());
+    }
+
+    /**
+     * Shared key resolver reused by other API clients (ImagenClient,
+     * EmbeddingClient). Reads {@code GEMINI_API_KEY} from the environment,
+     * falling back to a {@code .env} file walked from the current working
+     * directory up to the project root.
+     */
+    public static String resolveApiKey() {
         String key = System.getenv("GEMINI_API_KEY");
         if (key == null || key.isBlank()) {
             key = readDotEnv("GEMINI_API_KEY");
@@ -89,7 +99,7 @@ public final class GeminiClient {
                 "GEMINI_API_KEY is not set. Add it to a .env file in the project root:\n" +
                 "  GEMINI_API_KEY=your_key_here");
         }
-        return new GeminiClient(key);
+        return key;
     }
 
     /**

@@ -333,7 +333,7 @@ Legend: [x] complete · [~] in progress · [ ] pending
 - [ ] Step 3 — Model Tiering & Fallback Redesign
 - [~] Step 4 — RAG Architectural Knowledge Base
   - [x] 4.1 Knowledge corpus
-  - [ ] 4.2 Embedding + retrieval
+  - [x] 4.2 Embedding + retrieval
   - [ ] 4.3 Injection into planning
 - [ ] Step 5 — Hierarchical Decomposition
 - [ ] Step 6 — Geometric Toolbox & Sandbox

@@ -25,6 +25,7 @@ import com.rayyan.tesseract.jobs.BuildJobManager;
 import com.rayyan.tesseract.jobs.BuildQueueManager;
 import com.rayyan.tesseract.network.SelectionNetworking;
 import com.rayyan.tesseract.paste.PlanPasteClient;
+import com.rayyan.tesseract.rag.RagStore;
 import com.rayyan.tesseract.selection.Selection;
 import com.rayyan.tesseract.selection.SelectionManager;
 import io.netty.buffer.Unpooled;
@@ -65,6 +66,22 @@ public class TesseractMod implements ModInitializer {
 
 		LOGGER.info("Tesseract initialized.");
 		startEmbeddedHttpServer();
+
+		// §4.2 — warm the RAG vector store asynchronously. First launch embeds
+		// ~150 corpus entries via text-embedding-004 and caches the vectors to
+		// run/tesseract_cache/embeddings.bin; subsequent launches hit the cache
+		// and add only diffed rows. Failure is non-fatal (builds fall through
+		// to text-only via BuildState.textOnlyFallback).
+		RagStore.initAsync().whenComplete((store, err) -> {
+			if (err != null) {
+				LOGGER.warn("RagStore init failed: {}", err.getMessage());
+			} else if (store != null && store.isReady()) {
+				LOGGER.info("RagStore ready — {} corpus entries available for retrieval.", store.size());
+			} else if (store != null) {
+				LOGGER.warn("RagStore init degraded — {} (corpus size={})",
+						store.bootstrapError(), store.size());
+			}
+		});
 
 		// Clear all active build state on each new world load so stale locks from a
 		// previous session (or failed build) don't block the player from starting a new build.
