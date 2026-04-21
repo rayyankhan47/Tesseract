@@ -339,7 +339,10 @@ Legend: [x] complete · [~] in progress · [ ] pending
   - [x] 5.1 L1 ArchitectAgent
   - [x] 5.2 L2 DecomposerAgent
   - [x] 5.3 L3 ElementDesignerAgent
-- [ ] Step 6 — Geometric Toolbox & Sandbox
+- [~] Step 6 — Geometric Toolbox & Sandbox
+  - [x] 6.1 Core toolbox
+  - [ ] 6.2 Restricted Python sandbox
+  - [ ] 6.3 Self-extending toolbox
 - [ ] Step 7 — L4 REPL Agent
 - [ ] Step 8 — Parallel Critic Swarm
 - [ ] Step 9 — Fractal Texture Pass
