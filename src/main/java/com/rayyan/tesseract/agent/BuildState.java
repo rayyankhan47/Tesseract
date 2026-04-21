@@ -69,6 +69,15 @@ public final class BuildState {
     /** L3 Element Designer's per-zone elements, already dependency-sorted. Empty until §5.3 runs. */
     final List<com.rayyan.tesseract.plan.ElementSpec> elementSpecs = new CopyOnWriteArrayList<>();
 
+    // ---- Refactor 3, §6.3 — self-extending toolbox ----
+    /**
+     * Every finalised L4 REPL script accumulated across this build's
+     * elements. Populated by the L4 agent and handed to {@code ToolPromoter}
+     * at {@code COMPLETE} so reusable user-defined helpers can be promoted
+     * into the persistent toolbox library.
+     */
+    final List<String> buildScripts = new CopyOnWriteArrayList<>();
+
     // ---- Refactor 3, §4.3 — RAG architectural knowledge ----
     /**
      * Top-k corpus entries retrieved for this build's prompt+concept caption.

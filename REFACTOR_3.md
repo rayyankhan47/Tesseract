@@ -330,7 +330,6 @@ Legend: [x] complete · [~] in progress · [ ] pending
   - [x] 3.1 Model registry + TaskKind + CostTracker
   - [x] 3.2 Failure-class retry chains
   - [x] 3.3 Graceful degradation
-- [ ] Step 3 — Model Tiering & Fallback Redesign
 - [x] Step 4 — RAG Architectural Knowledge Base
   - [x] 4.1 Knowledge corpus
   - [x] 4.2 Embedding + retrieval
@@ -339,10 +338,10 @@ Legend: [x] complete · [~] in progress · [ ] pending
   - [x] 5.1 L1 ArchitectAgent
   - [x] 5.2 L2 DecomposerAgent
   - [x] 5.3 L3 ElementDesignerAgent
-- [~] Step 6 — Geometric Toolbox & Sandbox
+- [x] Step 6 — Geometric Toolbox & Sandbox
   - [x] 6.1 Core toolbox
   - [x] 6.2 Restricted Python sandbox
-  - [ ] 6.3 Self-extending toolbox
+  - [x] 6.3 Self-extending toolbox
 - [ ] Step 7 — L4 REPL Agent
 - [ ] Step 8 — Parallel Critic Swarm
 - [ ] Step 9 — Fractal Texture Pass
