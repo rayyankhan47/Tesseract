@@ -355,5 +355,5 @@ Legend: [x] complete · [~] in progress · [ ] pending
   - [x] 9.2 WFC patterned regions
   - [x] 9.3 L-system + decay + cracks
 - [x] Step 10 — State Machine & Orchestrator
-- [ ] Step 11 — Instant Placement
+- [x] Step 11 — Instant Placement
 - [ ] Step 12 — Testing, Prompt Tuning, Cost Audit

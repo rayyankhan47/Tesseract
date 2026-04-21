@@ -22,7 +22,6 @@ import org.slf4j.LoggerFactory;
 
 import com.rayyan.tesseract.agent.Orchestrator;
 import com.rayyan.tesseract.jobs.BuildJobManager;
-import com.rayyan.tesseract.jobs.BuildQueueManager;
 import com.rayyan.tesseract.network.SelectionNetworking;
 import com.rayyan.tesseract.paste.PlanPasteClient;
 import com.rayyan.tesseract.rag.RagStore;
@@ -87,7 +86,6 @@ public class TesseractMod implements ModInitializer {
 		// previous session (or failed build) don't block the player from starting a new build.
 		ServerLifecycleEvents.SERVER_STARTED.register(server -> {
 			BuildJobManager.clear();
-			BuildQueueManager.clear();
 			Orchestrator.getInstance().reset();
 			LOGGER.info("Tesseract: cleared build state for new world.");
 		});
@@ -155,7 +153,6 @@ public class TesseractMod implements ModInitializer {
 
 		ServerTickEvents.END_SERVER_TICK.register(server -> {
 			BuildJobManager.tick();
-			BuildQueueManager.tick(server);
 			com.rayyan.tesseract.agent.Orchestrator.getInstance().tick(server);
 		});
 

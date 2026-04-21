@@ -6,7 +6,7 @@ import com.rayyan.tesseract.api.GeminiClient;
 import com.rayyan.tesseract.api.ImagenClient;
 import com.rayyan.tesseract.paste.BuildPlan;
 import com.rayyan.tesseract.jobs.BuildJobManager;
-import com.rayyan.tesseract.jobs.BuildQueueManager;
+import com.rayyan.tesseract.placement.SyncPlacer;
 import com.rayyan.tesseract.selection.Selection;
 import com.rayyan.tesseract.blueprint.Blueprint;
 import com.rayyan.tesseract.texture.FractalTexturePipeline;
@@ -346,13 +346,16 @@ public final class Orchestrator {
                 }
 
                 ServerWorld world = (ServerWorld) state.player.getWorld();
+                MinecraftServer srv = world.getServer();
                 AgentProgressManager.updateLabel(state.playerId, "Placing blocks…");
-                BuildQueueManager.startComponentBuild(
-                        state.playerId, world, state.placementOrigin, state.completedOps,
-                        () -> onServerThread(state, () -> {
-                            emit(state, "Placement", "Placed " + state.completedOps.size() + " blocks.");
-                            transition(state, OrchestratorState.COMPLETE);
-                        }));
+                SyncPlacer.placeAll(world, state.placementOrigin, state.completedOps, srv, result -> {
+                    String msg = "Placed " + result.placed() + " blocks.";
+                    if (result.failures() > 0) {
+                        msg += " (" + result.failures() + " failed.)";
+                    }
+                    emit(state, "Placement", msg);
+                    transition(state, OrchestratorState.COMPLETE);
+                });
             }
 
             case COMPLETE -> finalizeComplete(state);

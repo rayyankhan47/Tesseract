@@ -2,10 +2,12 @@ package com.rayyan.tesseract.paste;
 
 import com.rayyan.tesseract.TesseractMod;
 import com.rayyan.tesseract.jobs.BuildJobManager;
-import com.rayyan.tesseract.jobs.BuildQueueManager;
+import com.rayyan.tesseract.placement.SyncPlacer;
 import com.rayyan.tesseract.selection.Selection;
+import net.minecraft.server.world.ServerWorld;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.text.Text;
+import net.minecraft.util.math.BlockPos;
 
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -76,11 +78,32 @@ public final class PlanPasteClient {
 						BuildJobManager.finish(player.getUuid());
 						return;
 					}
-					boolean built = BuildQueueManager.startInstantBuild(player, selection, plan);
-					if (!built) {
-						player.sendMessage(Text.of("Error: failed to place plan blocks (request " + requestId + ")."), false);
+					ServerWorld world = (ServerWorld) player.getWorld();
+					BlockPos origin = selection.getMin();
+					if (origin == null) {
+						player.sendMessage(Text.of("Error: invalid selection origin (request " + requestId + ")."), false);
+						BuildJobManager.finish(player.getUuid());
+						return;
 					}
-					BuildJobManager.finish(player.getUuid());
+					if (plan.ops.size() <= SyncPlacer.LARGE_BUILD_THRESHOLD) {
+						SyncPlacer.PlacementResult r = SyncPlacer.placeRange(
+								world, origin, plan.ops, 0, plan.ops.size());
+						player.sendMessage(Text.of("Build complete: " + r.placed() + " blocks"
+								+ (r.failures() > 0 ? " (" + r.failures() + " failed)" : "") + "."), false);
+						if (r.placed() == 0 && !plan.ops.isEmpty()) {
+							player.sendMessage(Text.of("Error: failed to place plan blocks (request " + requestId + ")."), false);
+						}
+						BuildJobManager.finish(player.getUuid());
+						return;
+					}
+					SyncPlacer.placeAll(world, origin, plan.ops, player.getServer(), stats -> {
+						player.sendMessage(Text.of("Build complete: " + stats.placed() + " blocks"
+								+ (stats.failures() > 0 ? " (" + stats.failures() + " failed)" : "") + "."), false);
+						if (stats.placed() == 0 && !plan.ops.isEmpty()) {
+							player.sendMessage(Text.of("Error: failed to place plan blocks (request " + requestId + ")."), false);
+						}
+						BuildJobManager.finish(player.getUuid());
+					});
 				});
 			});
 	}
