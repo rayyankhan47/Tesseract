@@ -78,6 +78,16 @@ public final class BuildState {
      */
     final List<String> buildScripts = new CopyOnWriteArrayList<>();
 
+    // ---- Refactor 3, §7.3 — cumulative L4 build ----
+    /**
+     * Element-by-element accumulator for locked L4 ops. Created lazily
+     * by the L4 scheduler; may be null in text-only fallback paths.
+     * Overlap detection (§7.3.3) lives here.
+     */
+    CumulativeBuild cumulativeBuild;
+    /** Every {@link ElementLock} that committed during Step 7's REPL. */
+    final List<ElementLock> elementLocks = new CopyOnWriteArrayList<>();
+
     // ---- Refactor 3, §4.3 — RAG architectural knowledge ----
     /**
      * Top-k corpus entries retrieved for this build's prompt+concept caption.
