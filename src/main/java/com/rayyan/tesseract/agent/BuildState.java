@@ -197,4 +197,14 @@ public final class BuildState {
     public void appendTimeline(String line) {
         timeline.add(line);
     }
+
+    /** Read-only view for texture passes (§9) outside this package. */
+    public java.util.List<com.rayyan.tesseract.plan.StructuralZone> zoneSpecsView() {
+        return java.util.List.copyOf(zoneSpecs);
+    }
+
+    /** Read-only view for texture passes (§9). */
+    public java.util.List<com.rayyan.tesseract.plan.ElementSpec> elementSpecsView() {
+        return java.util.List.copyOf(elementSpecs);
+    }
 }
