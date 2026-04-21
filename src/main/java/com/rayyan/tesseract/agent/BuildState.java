@@ -61,6 +61,10 @@ public final class BuildState {
      */
     boolean textOnlyFallback;
 
+    // ---- Refactor 3, §5 — hierarchical decomposition outputs ----
+    /** L1 Architect's top-level massing plan; null until §5.1 runs. */
+    com.rayyan.tesseract.plan.MassPlan massPlan;
+
     // ---- Refactor 3, §4.3 — RAG architectural knowledge ----
     /**
      * Top-k corpus entries retrieved for this build's prompt+concept caption.
